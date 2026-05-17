@@ -37,14 +37,14 @@ public class ScheduleController {
                         HttpStatus.NO_CONTENT);
     }
 
-    @GetMapping
+    @GetMapping("/{id}")
     public ResponseEntity<ScheduleResponse> getScheduleById(@RequestParam UUID id){
 
         return ResponseEntity
                 .ok(scheduleService.getScheduleById(id));
     }
 
-    @GetMapping
+    @GetMapping("/all")
     public ResponseEntity<List<ScheduleResponse>> getAllSchedule(){
 
         return ResponseEntity
