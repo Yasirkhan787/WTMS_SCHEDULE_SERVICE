@@ -1,0 +1,44 @@
+package com.yasirkhan.schedule.consumers;
+
+import com.yasirkhan.schedule.models.dtos.UserResponseEventDto;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+@Component
+@Slf4j
+public class UserEventConsumer {
+
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    public UserEventConsumer(RedisTemplate<String, Object> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    @KafkaListener(
+            topics = "user-response-topic",
+            groupId = "schedule-group",
+            containerFactory = "listenerContainerFactory"
+    )
+    public void handleUserResponse(UserResponseEventDto event) {
+
+        if ("SUCCESS".equals(event.getEventTypeStatus())) {
+            UUID userId = event.getUserId();
+
+            Map<String, Object> map = new HashMap<>();
+            map.put("name", event.getName());
+            map.put("phoneNo", event.getPhoneNo());
+            map.put("status", event.getStatus());
+
+            log.info("Saving Data TO Redis");
+            // Save Hash to Redis
+            String redisKey = "wtms:user:" + userId;
+            redisTemplate.opsForHash().putAll(redisKey, map);
+        }
+    }
+}

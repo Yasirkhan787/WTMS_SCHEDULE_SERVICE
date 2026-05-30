@@ -1,13 +1,12 @@
 package com.yasirkhan.schedule.models.entities;
 
-
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Getter
@@ -24,13 +23,18 @@ public class Schedule {
 
     private String scheduleName;
 
-    private UUID vehicleId;
+    private String vehicleNo;
 
     private UUID driverId;
 
     private UUID routeId;
 
-    private Shift shift;
+    private LocalDate scheduleDate;
 
-    private LocalDateTime scheduleTime;
+    // Many dispatches/schedules can use the exact same Shift Template
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "template_id", referencedColumnName = "templateId")
+    private ShiftTemplate template;
+
+    private Status shiftStatus;
 }

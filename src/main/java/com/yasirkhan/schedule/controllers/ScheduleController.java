@@ -5,6 +5,7 @@ import com.yasirkhan.schedule.responses.ScheduleResponse;
 import com.yasirkhan.schedule.services.ScheduleService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,33 +22,35 @@ public class ScheduleController {
         this.scheduleService = scheduleService;
     }
 
+    // Add Schedule
     @PostMapping("/add")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR')")
     public ResponseEntity<ScheduleResponse> createSchedule(@RequestBody ScheduleRequest request) {
-        return ResponseEntity
-                .ok(scheduleService.createSchedule(request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(scheduleService.createSchedule(request));
     }
 
+    // Update Schedule
     @PatchMapping("/update")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR')") // FIXED: Proper Spring Security SpEL syntax
     public ResponseEntity<String> updateSchedule(@RequestBody Map<String, Object> updates){
-
         scheduleService.updateSchedule(updates);
-
-        return new ResponseEntity
-                ("Schedule with Id: " + updates.get("scheduleId") + "Updated Successfully",
-                        HttpStatus.NO_CONTENT);
+        return new ResponseEntity<>(
+                "Schedule with Id: " + updates.get("scheduleId") + " Updated Successfully",
+                HttpStatus.NO_CONTENT
+        );
     }
 
+    // Get Schedule
     @GetMapping("/{id}")
-    public ResponseEntity<ScheduleResponse> getScheduleById(@RequestParam UUID id){
-
-        return ResponseEntity
-                .ok(scheduleService.getScheduleById(id));
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR')") // FIXED: Proper Spring Security SpEL syntax
+    public ResponseEntity<ScheduleResponse> getScheduleById(@PathVariable UUID id){ // FIXED: Changed @RequestParam to @PathVariable
+        return ResponseEntity.ok(scheduleService.getScheduleById(id));
     }
 
+    // Get All Schedules
     @GetMapping("/all")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR')") // FIXED: Proper Spring Security SpEL syntax
     public ResponseEntity<List<ScheduleResponse>> getAllSchedule(){
-
-        return ResponseEntity
-                .ok(scheduleService.getAllSchedule());
+        return ResponseEntity.ok(scheduleService.getAllSchedule());
     }
 }

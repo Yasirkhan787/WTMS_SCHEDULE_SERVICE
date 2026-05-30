@@ -1,24 +1,27 @@
 package com.yasirkhan.schedule.requests;
 
-import com.yasirkhan.schedule.models.entities.Shift;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.UUID;
 @Data
 @Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class ScheduleRequest {
 
     private String scheduleName;
 
-    private UUID vehicleId;
+    private String vehicleNo;
 
     private UUID driverId;
 
     private UUID routeId;
 
-    private Shift shift;
+    private LocalDate scheduleDate;
 
-    private LocalDateTime scheduleTime;
+    private UUID templateId;
 }
