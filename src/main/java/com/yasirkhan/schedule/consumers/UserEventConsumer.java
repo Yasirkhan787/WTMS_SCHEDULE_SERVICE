@@ -1,6 +1,7 @@
 package com.yasirkhan.schedule.consumers;
 
 import com.yasirkhan.schedule.models.dtos.UserResponseEventDto;
+import com.yasirkhan.schedule.models.enums.EventStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -27,7 +28,7 @@ public class UserEventConsumer {
     )
     public void handleUserResponse(UserResponseEventDto event) {
 
-        if ("SUCCESS".equals(event.getEventTypeStatus())) {
+        if (EventStatus.SUCCESS.equals(event.getEventTypeStatus()) && "DRIVER".equals(event.getRole())) {
             UUID userId = event.getUserId();
 
             Map<String, Object> map = new HashMap<>();

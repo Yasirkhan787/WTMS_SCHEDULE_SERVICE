@@ -1,4 +1,4 @@
-package com.yasirkhan.schedule.models.entities;
+package com.yasirkhan.schedule.models.enums;
 
 public enum Status {
 

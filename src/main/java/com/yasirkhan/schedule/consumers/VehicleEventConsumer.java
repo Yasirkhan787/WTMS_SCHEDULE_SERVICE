@@ -1,6 +1,7 @@
 package com.yasirkhan.schedule.consumers;
 
-import com.yasirkhan.schedule.models.dtos.vehicleResponseEventDto;
+import com.yasirkhan.schedule.models.dtos.VehicleResponseEventDto;
+import com.yasirkhan.schedule.models.enums.EventStatus;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -22,9 +23,9 @@ public class VehicleEventConsumer {
             groupId = "schedule-group",
             containerFactory = "listenerContainerFactory"
     )
-    public void handleVehicleResponse(vehicleResponseEventDto event) {
+    public void handleVehicleResponse(VehicleResponseEventDto event) {
 
-        if ("SUCCESS".equals(event.getEventTypeStatus())) {
+        if (EventStatus.SUCCESS.equals(event.getEventTypeStatus())) {
             String vehicleNo = event.getVehicleNo();
 
             Map<String, Object> map = new HashMap<>();

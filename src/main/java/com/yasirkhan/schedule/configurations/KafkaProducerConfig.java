@@ -23,13 +23,19 @@ public class KafkaProducerConfig {
         BOOTSTRAP_SERVER = bootstrapServer;
     }
 
+    @Bean
+    public NewTopic scheduleEvent() { return new NewTopic("schedule-response-topic", 2, (short) 1); }
+
+    @Bean
+    public NewTopic shiftTemplateEvent() { return new NewTopic("shift-template-response-topic", 2, (short) 1); }
+
     // --- DLTs for Schedule Service Consumers ---
     @Bean
-    public NewTopic userEventDLT() { return new NewTopic("user-response-topic.DLT", 2, (short) 1); }
+    public NewTopic userEventDLT() { return new NewTopic("user-response-topic-dlt", 2, (short) 1); }
     @Bean
-    public NewTopic vehicleEventDLT() { return new NewTopic("vehicle-response-topic.DLT", 2, (short) 1); }
+    public NewTopic vehicleEventDLT() { return new NewTopic("vehicle-response-topic-dlt", 2, (short) 1); }
     @Bean
-    public NewTopic routeEventDLT() { return new NewTopic("route-response-topic.DLT", 2, (short) 1); }
+    public NewTopic routeEventDLT() { return new NewTopic("route-response-topic-dlt", 2, (short) 1); }
 
     @Bean
     public Map<String, Object> producerConfig(){

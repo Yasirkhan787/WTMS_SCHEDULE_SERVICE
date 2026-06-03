@@ -9,29 +9,28 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Map;
-import java.util.UUID;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class RouteResponseEventDto {
+public class VehicleResponseEventDto {
 
     private EventStatus eventTypeStatus; // SUCCESS, FAILURE
-
-    private UUID routeId;
-    private String origin;
-    private String destination;
+    private String vehicleNo;
     private String status;
 
-    @JsonProperty("routeData")
-    private void unpackNestedRouteData(Map<String, Object> routeData) {
-        if (routeData != null) {
-            this.routeId = UUID.fromString((String) routeData.get("routeId"));
-            this.origin = (String) routeData.get("origin");
-            this.destination = (String) routeData.get("destination");
-            this.status = (String) routeData.get("status");
+    /**
+     * This method acts as a bridge. When Jackson parses the JSON,
+     * it grabs the nested "vehicleData" object and runs this method,
+     * flattening the data into your fields.
+     */
+    @JsonProperty("vehicleData")
+    private void unpackNestedVehicleData(Map<String, Object> vehicleData) {
+        if (vehicleData != null) {
+            this.vehicleNo = (String) vehicleData.get("vehicleNo");
+            this.status = (String) vehicleData.get("status");
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.yasirkhan.schedule.models.entities;
 
+import com.yasirkhan.schedule.models.enums.Status;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;

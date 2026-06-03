@@ -16,15 +16,12 @@ public class ResponseConversion {
 
     public static ScheduleResponse toScheduleResponse(Schedule savedSchedule) {
 
-        ScheduleResponse response =
-                ScheduleResponse
-                        .builder()
-                        .scheduleId(savedSchedule.getScheduleId())
-                        .scheduleName(savedSchedule.getScheduleName())
-                        .scheduleDate(savedSchedule.getScheduleDate())
-                        .shiftStatus(savedSchedule.getShiftStatus())
-                        .build();
-
+        ScheduleResponse response = ScheduleResponse.builder()
+                .scheduleId(savedSchedule.getScheduleId())
+                .scheduleName(savedSchedule.getScheduleName())
+                .scheduleDate(savedSchedule.getScheduleDate())
+                .scheduleStatus(savedSchedule.getStatus())
+                .build();
 
         if (savedSchedule.getTemplate() != null) {
             response.setShiftName(savedSchedule.getTemplate().getShiftName());
@@ -36,18 +33,16 @@ public class ResponseConversion {
     }
 
     public static ShiftTemplateResponse toShiftTemplateResponse(ShiftTemplate savedShiftTemplate) {
-
-        return
-                ShiftTemplateResponse
-                        .builder()
-                        .templateId(savedShiftTemplate.getTemplateId())
-                        .shiftName(savedShiftTemplate.getShiftName())
-                        .startTime(savedShiftTemplate.getStartTime())
-                        .endTime(savedShiftTemplate.getEndTime())
-                        .remarks(savedShiftTemplate.getRemarks())
-                        .build();
+        return ShiftTemplateResponse.builder()
+                .templateId(savedShiftTemplate.getTemplateId())
+                .shiftName(savedShiftTemplate.getShiftName())
+                .startTime(savedShiftTemplate.getStartTime())
+                .endTime(savedShiftTemplate.getEndTime())
+                .remarks(savedShiftTemplate.getRemarks())
+                .build();
     }
 
+    // All Resources - Now 100% Null-Safe for Stale Redis Data
     public static ResourceResponse toResourceResponse(
             List<Map<Object, Object>> activeVehicles,
             List<Map<Object, Object>> activeDrivers,
@@ -57,29 +52,29 @@ public class ResponseConversion {
         return ResourceResponse.builder()
                 .vehicles(activeVehicles.stream().map(v -> ResourceResponse.VehicleOption.builder()
                         .vehicleNo(v.get("vehicleNo").toString())
-                        .status(v.get("status").toString())
+                        .status(v.get("status") != null ? v.get("status").toString() : "ACTIVE")
                         .build()).collect(Collectors.toList()))
 
                 .drivers(activeDrivers.stream().map(d -> ResourceResponse.DriverOption.builder()
-                        .driverId(UUID.fromString(d.get("driverId").toString()))
-                        .name(d.get("name").toString())
-                        .phoneNo(d.get("phoneNo").toString())
-                        .status(d.get("status").toString())
+                        .driverId(UUID.fromString(d.get("driverId").toString())) // Injected from key
+                        .name(d.get("name") != null ? d.get("name").toString() : "Unknown Name")
+                        .phoneNo(d.get("phoneNo") != null ? d.get("phoneNo").toString() : "")
+                        .status(d.get("status") != null ? d.get("status").toString() : "ACTIVE")
                         .build()).collect(Collectors.toList()))
 
                 .routes(activeRoutes.stream().map(r -> ResourceResponse.RouteOption.builder()
-                        .routeId(UUID.fromString(r.get("routeId").toString()))
-                        .origin(r.get("origin").toString())
-                        .destination(r.get("destination").toString())
-                        .status(r.get("status").toString())
+                        .routeId(UUID.fromString(r.get("routeId").toString())) // Injected from key
+                        .origin(r.get("origin") != null ? r.get("origin").toString() : "Unknown Origin")
+                        .destination(r.get("destination") != null ? r.get("destination").toString() : "Unknown Destination")
+                        .status(r.get("status") != null ? r.get("status").toString() : "ACTIVE")
                         .build()).collect(Collectors.toList()))
 
                 .templates(activeTemplates.stream().map(t -> ResourceResponse.TemplateOption.builder()
-                        .templateId(UUID.fromString(t.get("templateId").toString()))
-                        .shiftName(t.get("shiftName").toString())
-                        .startTime(LocalTime.parse(t.get("startTime").toString())) // Handle parsing safely
-                        .endTime(LocalTime.parse(t.get("endTime").toString()))
-                        .status(t.get("status").toString())
+                        .templateId(UUID.fromString(t.get("templateId").toString())) // Injected from key
+                        .shiftName(t.get("shiftName") != null ? t.get("shiftName").toString() : "Unnamed Shift")
+                        .startTime(t.get("startTime") != null ? LocalTime.parse(t.get("startTime").toString()) : null)
+                        .endTime(t.get("endTime") != null ? LocalTime.parse(t.get("endTime").toString()) : null)
+                        .status(t.get("status") != null ? t.get("status").toString() : "ACTIVE")
                         .build()).collect(Collectors.toList()))
                 .build();
     }

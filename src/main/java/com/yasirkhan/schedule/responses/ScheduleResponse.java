@@ -1,7 +1,7 @@
 package com.yasirkhan.schedule.responses;
 
-import com.yasirkhan.schedule.models.entities.ShiftTemplate;
-import com.yasirkhan.schedule.models.entities.Status;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.yasirkhan.schedule.models.enums.Status;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,20 +20,24 @@ public class ScheduleResponse {
     // PostgreSQL Data
     private UUID scheduleId;
     private String scheduleName;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd/MM/yyyy")
     private LocalDate scheduleDate;
-    private Status shiftStatus;
+    private Status scheduleStatus;
 
     // Shift Template Data (PostgreSQL Joined)
+    private UUID templateId;
     private String shiftName;
     private LocalTime startTime;
     private LocalTime endTime;
 
     // Redis Enriched Data
-    private String name;
-    private String phoneNo;
+    private UUID driverId;
+    private String driverName;
+    private String driverPhoneNo;
     private String driverStatus;
     private String vehicleNo;
     private String vehicleStatus;
+    private UUID routeId;
     private String routeOrigin;
     private String routeDestination;
 

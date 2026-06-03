@@ -1,5 +1,6 @@
 package com.yasirkhan.schedule.models.entities;
 
+import com.yasirkhan.schedule.models.enums.Status;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -36,5 +37,5 @@ public class Schedule {
     @JoinColumn(name = "template_id", referencedColumnName = "templateId")
     private ShiftTemplate template;
 
-    private Status shiftStatus;
+    private Status status;
 }
