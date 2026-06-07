@@ -31,6 +31,7 @@ public class RouteEventConsumer {
 
             Map<String, Object> map = new HashMap<>();
             map.put("routeName", event.getRouteName());
+            map.put("routePath", event.getRoutePath());
             map.put("tehsilId", event.getTehsilId());
             map.put("tehsilName", event.getTehsilName());
             map.put("sourceYardId", event.getSourceYardId());

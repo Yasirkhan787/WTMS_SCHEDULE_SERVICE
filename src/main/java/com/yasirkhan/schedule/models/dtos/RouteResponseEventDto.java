@@ -22,6 +22,7 @@ public class RouteResponseEventDto {
 
     private UUID routeId;
     private String routeName;
+    private String routePath;
     private UUID tehsilId;
     private String tehsilName;
     private UUID sourceYardId;
@@ -37,6 +38,7 @@ public class RouteResponseEventDto {
         if (routeData != null) {
             this.routeId = UUID.fromString((String) routeData.get("routeId"));
             this.routeName = (String) routeData.get("routeName");
+            this.routePath = (String) routeData.get("routePath");
             this.tehsilId = (UUID.fromString((String) routeData.get("tehsilId")));
             this.tehsilName = (String) routeData.get("tehsilName");
             this.sourceYardId = (UUID.fromString((String) routeData.get("sourceYardId")));

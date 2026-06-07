@@ -41,4 +41,5 @@ public class ScheduleResponse {
     private String vehicleStatus;
     private UUID routeId;
     private String routeName;
+    private String routePath;
 }

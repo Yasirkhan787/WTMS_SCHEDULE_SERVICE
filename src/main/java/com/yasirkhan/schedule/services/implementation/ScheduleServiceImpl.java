@@ -184,7 +184,6 @@ public class ScheduleServiceImpl implements ScheduleService {
             throw new UnauthorizedException("You do not have permission to view schedules.");
         }
 
-        // This temporary cache ensures we only hit Redis ONCE per unique Driver/Vehicle/Route
         Map<String, Map<Object, Object>> localCache = new HashMap<>();
 
         return dbSchedules.stream()
@@ -214,6 +213,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                     Map<Object, Object> routeData = localCache.computeIfAbsent(routeKey, k -> redisTemplate.opsForHash().entries(k));
 
                     response.setRouteId(schedule.getRouteId());
+                    response.setRoutePath(routeData.get("routePath") != null ? routeData.get("routePath").toString() : "Unknown Route Path");
                     response.setRouteName(routeData.get("routeName") != null ? routeData.get("routeName").toString() : "Unknown Route");
                     response.setTehsilName(routeData.get("tehsilName") != null ? routeData.get("tehsilName").toString() : "Unknown Tehsil");
 
