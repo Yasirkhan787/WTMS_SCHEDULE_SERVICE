@@ -15,5 +15,5 @@ public interface ScheduleService {
 
     ScheduleResponse getScheduleById(UUID scheduleId);
 
-    List<ScheduleResponse> getAllSchedule();
+    List<ScheduleResponse> getAllSchedules(String statusFilter);
 }

@@ -1,5 +1,9 @@
 package com.yasirkhan.schedule.services.implementation;
 
+import com.yasirkhan.schedule.models.UserPrincipal;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import com.yasirkhan.schedule.exceptions.ResourceNotFoundException;
 import com.yasirkhan.schedule.models.entities.Schedule;
 import com.yasirkhan.schedule.models.entities.ShiftTemplate;
@@ -14,9 +18,12 @@ import com.yasirkhan.schedule.utils.ResponseConversion;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class ResourceServiceImpl implements ResourceService {
 
     private final RedisTemplate<String, Object> redisTemplate;
@@ -33,7 +40,6 @@ public class ResourceServiceImpl implements ResourceService {
     @Override
     public AvailableAssetResponse getAvailableAssets(AvailableAssetRequest request) {
 
-        // THE BASE QUERY (Status Check via Redis)
         List<Map<Object, Object>> activeVehicles = getAllActiveVehiclesFromCache();
 
         List<Map<Object, Object>> activeDrivers = getAllActiveDriversFromCache();
@@ -66,7 +72,6 @@ public class ResourceServiceImpl implements ResourceService {
                 .filter(driver -> isGeographicallyValid(driver.get("driverId").toString(), targetRoute, targetShift, dailySchedules))
                 .toList();
 
-        // Package and send to frontend
         return AvailableAssetResponse.builder()
                 .availableVehicles(finalValidVehicles.stream().map(v -> ResourceResponse.VehicleOption.builder()
                         .vehicleNo(v.get("vehicleNo").toString())
@@ -75,6 +80,7 @@ public class ResourceServiceImpl implements ResourceService {
                 .availableDrivers(finalValidDrivers.stream().map(d -> ResourceResponse.DriverOption.builder()
                         .driverId(UUID.fromString(d.get("driverId").toString()))
                         .name(d.get("name") != null ? d.get("name").toString() : "Unknown")
+                        .phoneNo(d.get("phoneNo") != null ? d.get("phoneNo").toString() : null)
                         .status(d.get("status") != null ? d.get("status").toString() : "ACTIVE")
                         .build()).toList())
                 .build();
@@ -116,74 +122,126 @@ public class ResourceServiceImpl implements ResourceService {
     @Override
     public AvailableResourceResponse getAvailableResources() {
 
-        List<Map<Object, Object>> activeRoutes = getAllRoutesFromCache().stream()
-                .filter(r -> "ACTIVE".equals(r.get("status")))
-                .toList();
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new RuntimeException("Unauthorized: No valid session found.");
+        }
+        UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
+        String supervisorId = principal.userId();
+        String userKey = "wtms:user:" + supervisorId;
+        String tehsilId = (String) redisTemplate.opsForHash().get(userKey, "tehsilId");
 
-        List<Map<Object, Object>> activeTemplates = getAllTemplatesFromCache().stream()
-                .filter(t -> "ACTIVE".equals(t.get("status")))
-                .toList();
+        if (tehsilId == null || tehsilId.isEmpty()) {
+            throw new ResourceNotFoundException("No territory (Tehsil) assigned to this supervisor.");
+        }
+
+        List<Map<Object, Object>> activeRoutes = getActiveRoutesByTehsilFromCache(tehsilId);
+
+        /*
+        // List<Map<Object, Object>> activeYards = getActiveYardsByTehsilFromCache(tehsilId);
+        // 4. Categorize Yards
+        List<ResourceResponse.YardOption> collectionPoints = activeYards.stream()
+                .filter(y -> "COLLECTION_POINT".equals(y.get("yardType")))
+                .map(y -> ResourceResponse.YardOption.builder()
+                        .yardId(UUID.fromString(y.get("yardId").toString()))
+                        .yardName(y.get("yardName").toString()).build())
+                .collect(Collectors.toList());
+
+        List<ResourceResponse.YardOption> dumpSites = activeYards.stream()
+                .filter(y -> "DUMP_SITE".equals(y.get("yardType")))
+                .map(y -> ResourceResponse.YardOption.builder()
+                        .yardId(UUID.fromString(y.get("yardId").toString()))
+                        .yardName(y.get("yardName").toString()).build())
+                .collect(Collectors.toList());
+
+         */
 
         return AvailableResourceResponse.builder()
                 .activeRoutes(activeRoutes.stream().map(r -> ResourceResponse.RouteOption.builder()
                         .routeId(UUID.fromString(r.get("routeId").toString()))
-                        .origin(r.get("origin") != null ? r.get("origin").toString() : "")
-                        .destination(r.get("destination") != null ? r.get("destination").toString() : "")
-                        .status(r.get("status") != null ? r.get("status").toString() : "ACTIVE")
-                        .build()).toList())
-
-                .activeTemplates(activeTemplates.stream().map(t -> ResourceResponse.TemplateOption.builder()
-                        .templateId(UUID.fromString(t.get("templateId").toString()))
-                        .shiftName(t.get("shiftName") != null ? t.get("shiftName").toString() : "")
-                        .startTime(t.get("startTime") != null ? java.time.LocalTime.parse(t.get("startTime").toString()) : null)
-                        .endTime(t.get("endTime") != null ? java.time.LocalTime.parse(t.get("endTime").toString()) : null)
-                        .status(t.get("status") != null ? t.get("status").toString() : "ACTIVE")
-                        .build()).toList())
+                        .routeName(r.get("routeName").toString())
+                        .tehsilId(UUID.fromString(r.get("tehsilId").toString()))
+                        .tehsilName(r.get("tehsilName").toString())
+                        .build()).collect(Collectors.toList()))
+                .activeTemplates(getAllActiveTemplatesFromCache().stream()
+                        .map(t -> ResourceResponse.TemplateOption.builder()
+                                .templateId(UUID.fromString(t.get("templateId").toString()))
+                                .shiftName(t.get("shiftName").toString())
+                                .startTime(t.get("startTime").toString())
+                                .endTime(t.get("endTime").toString())
+                                .build())
+                        .collect(Collectors.toList()))
                 .build();
     }
 
-    @Override
-    public ResourceResponse getAllResources() {
-        List<Map<Object, Object>> activeVehicles = getAllActiveVehiclesFromCache();
+    public List<Map<Object, Object>> getActiveYardsByTehsilFromCache(String tehsilId) {
+        List<Map<Object, Object>> filteredYards = new ArrayList<>();
 
-        List<Map<Object, Object>> activeDrivers = getAllActiveDriversFromCache();
+        Set<String> keys = redisTemplate.keys("wtms:yard:*");
+        if (keys != null) {
+            for (String key : keys) {
+                Map<Object, Object> data = redisTemplate.opsForHash().entries(key);
 
-        List<Map<Object, Object>> activeRoutes = getAllActiveRoutesFromCache();
+                String yardTehsilId = data.get("tehsilId") != null ? data.get("tehsilId").toString() : "";
+                String status = data.get("status") != null ? data.get("status").toString() : "";
 
-        List<Map<Object, Object>> activeTemplates = getAllActiveTemplatesFromCache();
+                // Only return if it's ACTIVE and belongs to the Supervisor's Tehsil
+                if ("ACTIVE".equals(status) && tehsilId.equals(yardTehsilId)) {
+                    data.put("yardId", key.replace("wtms:yard:", ""));
+                    filteredYards.add(data);
+                }
+            }
+        }
+        return filteredYards;
+    }
 
-        return ResponseConversion.toResourceResponse(activeVehicles, activeDrivers, activeRoutes, activeTemplates);
+    public List<Map<Object, Object>> getActiveRoutesByTehsilFromCache(String tehsilId) {
+        List<Map<Object, Object>> filteredRoutes = new ArrayList<>();
+
+        Set<String> keys = redisTemplate.keys("wtms:route:*");
+
+        if (keys != null) {
+            for (String key : keys) {
+                Map<Object, Object> data = redisTemplate.opsForHash().entries(key);
+
+                String routeTehsilId = data.get("tehsilId") != null ? data.get("tehsilId").toString() : "";
+                String status = data.get("status") != null ? data.get("status").toString() : "";
+
+                // Only return if it's ACTIVE and matches the Supervisor's Tehsil
+                if ("ACTIVE".equals(status) && tehsilId.equals(routeTehsilId)) {
+                    data.put("routeId", key.replace("wtms:route:", ""));
+                    filteredRoutes.add(data);
+                }
+            }
+        }
+        return filteredRoutes;
     }
 
     // Helpers Methods
-
-    // Get All Active Vehicles from Redis Cache
     public List<Map<Object, Object>> getAllActiveVehiclesFromCache() {
         return getAllVehiclesFromCache().stream()
                 .filter(v -> "ACTIVE".equals(v.get("status")))
                 .toList();
     }
 
-    // Get All Active Drivers from Redis Cache
     public List<Map<Object, Object>> getAllActiveDriversFromCache() {
         return getAllDriversFromCache().stream()
                 .filter(d -> "ACTIVE".equals(d.get("status")))
                 .toList();
     }
-    // Get All Active Routes from Redis Cache
+
     public List<Map<Object, Object>> getAllActiveRoutesFromCache() {
         return getAllRoutesFromCache().stream()
                 .filter(r -> "ACTIVE".equals(r.get("status")))
                 .toList();
     }
-    // Get All Active Templates from Redis Cache
+
     public List<Map<Object, Object>> getAllActiveTemplatesFromCache() {
         return getAllTemplatesFromCache().stream()
                 .filter(t -> "ACTIVE".equals(t.get("status")))
                 .toList();
     }
 
-    // Get All Vehicles from Redis Cache
     public List<Map<Object, Object>> getAllVehiclesFromCache() {
         List<Map<Object, Object>> allVehicles = new ArrayList<>();
         Set<String> keys = redisTemplate.keys("wtms:vehicle:*");
@@ -197,15 +255,12 @@ public class ResourceServiceImpl implements ResourceService {
         return allVehicles;
     }
 
-    // Get All Drivers from Redis Cache
     public List<Map<Object, Object>> getAllDriversFromCache() {
         List<Map<Object, Object>> allDrivers = new ArrayList<>();
         Set<String> keys = redisTemplate.keys("wtms:user:*");
         if (keys != null) {
             for (String key : keys) {
                 Map<Object, Object> data = redisTemplate.opsForHash().entries(key);
-
-                // Only add to list if they are actually a DRIVER!
                 if ("DRIVER".equals(data.get("role"))) {
                     data.put("driverId", key.replace("wtms:user:", ""));
                     allDrivers.add(data);
@@ -215,7 +270,6 @@ public class ResourceServiceImpl implements ResourceService {
         return allDrivers;
     }
 
-    // Get All Routes from Redis Cache
     public List<Map<Object, Object>> getAllRoutesFromCache() {
         List<Map<Object, Object>> allRoutes = new ArrayList<>();
         Set<String> keys = redisTemplate.keys("wtms:route:*");
@@ -229,7 +283,6 @@ public class ResourceServiceImpl implements ResourceService {
         return allRoutes;
     }
 
-    // Get All Templates from Redis Cache
     public List<Map<Object, Object>> getAllTemplatesFromCache() {
         List<Map<Object, Object>> allTemplates = new ArrayList<>();
         Set<String> keys = redisTemplate.keys("wtms:template:*");
@@ -242,4 +295,5 @@ public class ResourceServiceImpl implements ResourceService {
         }
         return allTemplates;
     }
+
 }

@@ -5,6 +5,7 @@ import com.yasirkhan.schedule.responses.AvailableAssetResponse;
 import com.yasirkhan.schedule.responses.AvailableResourceResponse;
 import com.yasirkhan.schedule.responses.ResourceResponse;
 import com.yasirkhan.schedule.services.ResourceService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,6 +13,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/schedule/resources")
+@Slf4j
 public class ResourceController {
 
     private final ResourceService resourceService;

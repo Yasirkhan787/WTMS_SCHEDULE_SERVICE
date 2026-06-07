@@ -34,4 +34,8 @@ public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
 
     @Query("SELECT s.driverId FROM Schedule s WHERE s.scheduleDate = :date AND s.template.templateId = :templateId")
     List<UUID> findBookedDriverIds(@Param("date") LocalDate date, @Param("templateId") UUID templateId);
+
+    List<Schedule> findByDriverId(UUID driverId);
+
+    List<Schedule> findByRouteIdIn(List<UUID> routeIds);
 }

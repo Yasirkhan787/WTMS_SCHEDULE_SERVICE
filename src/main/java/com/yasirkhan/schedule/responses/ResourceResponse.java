@@ -31,8 +31,15 @@ public class ResourceResponse {
     @Data @Builder
     public static class RouteOption {
         private UUID routeId;
-        private String origin;
-        private String destination;
+        private String routeName;
+        private UUID tehsilId;
+        private String tehsilName;
+        private UUID sourceYardId;
+        private String sourceYardName;
+        private String sourceYardType;
+        private UUID destinationYardId;
+        private String destinationYardType;
+        private String destinationYardName;
         private String status;
     }
 
@@ -40,8 +47,15 @@ public class ResourceResponse {
     public static class TemplateOption {
         private UUID templateId;
         private String shiftName;
-        private LocalTime startTime;
-        private LocalTime endTime;
+        private String startTime;
+        private String endTime;
         private String status;
+    }
+
+    @Data
+    @Builder
+    public static class YardOption {
+        private UUID yardId;
+        private String yardName;
     }
 }

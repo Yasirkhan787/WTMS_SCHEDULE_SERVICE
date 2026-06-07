@@ -1,6 +1,7 @@
 package com.yasirkhan.schedule.consumers;
 
 import com.yasirkhan.schedule.models.dtos.RouteResponseEventDto;
+import com.yasirkhan.schedule.models.dtos.YardResponseEventDto;
 import com.yasirkhan.schedule.models.enums.EventStatus;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -11,38 +12,34 @@ import java.util.Map;
 import java.util.UUID;
 
 @Component
-public class RouteEventConsumer {
+public class YardEventConsumer {
 
     private final RedisTemplate<String, Object> redisTemplate;
 
-    public RouteEventConsumer(RedisTemplate<String, Object> redisTemplate) {
+    public YardEventConsumer(RedisTemplate<String, Object> redisTemplate) {
         this.redisTemplate = redisTemplate;
     }
 
     @KafkaListener(
-            topics = "route-response-topic",
+            topics = "yard-response-topic",
             groupId = "schedule-group",
             containerFactory = "listenerContainerFactory"
     )
-    public void handleRouteResponse(RouteResponseEventDto event) {
+    public void handleYardResponse(YardResponseEventDto event) {
 
         if (EventStatus.SUCCESS.equals(event.getEventTypeStatus())) {
-            UUID routeId = event.getRouteId();
+            UUID yardId = event.getYardId();
 
             Map<String, Object> map = new HashMap<>();
-            map.put("routeName", event.getRouteName());
+            map.put("yardName", event.getYardName());
+            map.put("yardType", event.getYardType());
+            map.put("boundaryType", event.getBoundaryType());
             map.put("tehsilId", event.getTehsilId());
-            map.put("tehsilName", event.getTehsilName());
-            map.put("sourceYardId", event.getSourceYardId());
-            map.put("sourceYardName", event.getSourceYardName());
-            map.put("sourceYardType", event.getSourceYardType());
-            map.put("destinationYardId", event.getDestinationYardId());
-            map.put("destinationYardName", event.getDestinationYardName());
-            map.put("destinationYardType", event.getDestinationYardType());
+            map.put("tehsilName",event.getTehsilName());
             map.put("status", event.getStatus());
 
             // Save Hash to Redis
-            String redisKey = "wtms:route:" + routeId;
+            String redisKey = "wtms:yard:" + yardId;
             redisTemplate.opsForHash().putAll(redisKey, map);
         }
     }

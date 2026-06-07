@@ -16,6 +16,8 @@ public class ScheduleRequest {
 
     private String scheduleName;
 
+    private UUID yardId;
+
     private String vehicleNo;
 
     private UUID driverId;

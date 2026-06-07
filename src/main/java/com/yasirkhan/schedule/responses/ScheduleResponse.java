@@ -31,6 +31,8 @@ public class ScheduleResponse {
     private LocalTime endTime;
 
     // Redis Enriched Data
+    private UUID tehsilId;
+    private String tehsilName;
     private UUID driverId;
     private String driverName;
     private String driverPhoneNo;
@@ -38,7 +40,5 @@ public class ScheduleResponse {
     private String vehicleNo;
     private String vehicleStatus;
     private UUID routeId;
-    private String routeOrigin;
-    private String routeDestination;
-
+    private String routeName;
 }

@@ -1,6 +1,7 @@
 package com.yasirkhan.schedule.configurations;
 
 import com.yasirkhan.schedule.exceptions.UnauthorizedException;
+import com.yasirkhan.schedule.models.UserPrincipal;
 import com.yasirkhan.schedule.services.implementation.DownstreamJwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -83,12 +84,14 @@ public class AuthorizationFilter extends OncePerRequestFilter {
             */
 
             // Authenticate in Spring Context
-            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 String authorityRole = role.startsWith("ROLE_") ? role : "ROLE_" + role.toUpperCase();
                 List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority(authorityRole));
 
+                UserPrincipal customPrincipal = new UserPrincipal(userId, username, role);
                 UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(username, null, authorities);
+                        new UsernamePasswordAuthenticationToken(customPrincipal, null, authorities);
+
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }
 

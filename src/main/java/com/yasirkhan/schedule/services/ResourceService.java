@@ -12,6 +12,4 @@ public interface ResourceService {
     AvailableAssetResponse getAvailableAssets(AvailableAssetRequest request);
 
     AvailableResourceResponse getAvailableResources();
-
-    ResourceResponse getAllResources();
 }

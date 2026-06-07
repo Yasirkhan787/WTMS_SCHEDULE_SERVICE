@@ -2,6 +2,8 @@ package com.yasirkhan.schedule.services.implementation;
 
 import com.yasirkhan.schedule.exceptions.DataBaseException;
 import com.yasirkhan.schedule.exceptions.ResourceNotFoundException;
+import com.yasirkhan.schedule.exceptions.UnauthorizedException;
+import com.yasirkhan.schedule.models.UserPrincipal;
 import com.yasirkhan.schedule.models.dtos.ScheduleResponseEventDto;
 import com.yasirkhan.schedule.models.entities.Schedule;
 import com.yasirkhan.schedule.models.entities.ShiftTemplate;
@@ -17,13 +19,12 @@ import com.yasirkhan.schedule.utils.ResponseConversion;
 import jakarta.transaction.Transactional;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -64,6 +65,7 @@ public class ScheduleServiceImpl implements ScheduleService {
 
         Schedule schedule = new Schedule();
         schedule.setScheduleName(request.getScheduleName());
+        schedule.setYardId(request.getYardId());
         schedule.setVehicleNo(request.getVehicleNo());
         schedule.setDriverId(request.getDriverId());
         schedule.setRouteId(request.getRouteId());
@@ -74,15 +76,12 @@ public class ScheduleServiceImpl implements ScheduleService {
         schedule.setTemplate(templateProxy);
 
         try {
-            // Save to PostgreSQL
             Schedule savedSchedule = scheduleRepository.save(schedule);
 
-            // Sync to local Redis Cache
             syncScheduleToRedis(savedSchedule);
 
             ScheduleResponse response = ResponseConversion.toScheduleResponse(savedSchedule);
 
-            // Enrich with foreign Redis Data for the API response payload
             String userKey = "wtms:user:" + schedule.getDriverId();
             response.setDriverName((String) redisTemplate.opsForHash().get(userKey, "name"));
             response.setDriverPhoneNo((String) redisTemplate.opsForHash().get(userKey, "phoneNo"));
@@ -92,10 +91,10 @@ public class ScheduleServiceImpl implements ScheduleService {
             response.setVehicleStatus((String) redisTemplate.opsForHash().get(vehicleKey, "status"));
 
             String routeKey = "wtms:route:" + schedule.getRouteId();
-            response.setRouteOrigin((String) redisTemplate.opsForHash().get(routeKey, "origin"));
-            response.setRouteDestination((String) redisTemplate.opsForHash().get(routeKey, "destination"));
+            response.setScheduleName((String) redisTemplate.opsForHash().get(routeKey, "routeName"));
+            response.setTehsilId(UUID.fromString((String) redisTemplate.opsForHash().get(routeKey, "tehsilId")));
+            response.setTehsilName((String) redisTemplate.opsForHash().get(routeKey, "tehsilId"));
 
-            // 4. Broadcast to Kafka
             publishScheduleEvent(EventType.CREATE, EventStatus.SUCCESS, response);
 
             return response;
@@ -129,7 +128,6 @@ public class ScheduleServiceImpl implements ScheduleService {
         try {
             Schedule savedSchedule = scheduleRepository.save(dbSchedule);
 
-            // Sync the fully updated state to Redis
             syncScheduleToRedis(savedSchedule);
 
             ScheduleResponse response = ResponseConversion.toScheduleResponse(savedSchedule);
@@ -148,34 +146,90 @@ public class ScheduleServiceImpl implements ScheduleService {
     }
 
     @Override
-    public List<ScheduleResponse> getAllSchedule() {
-        List<Schedule> dbSchedules = scheduleRepository.findAll();
+    public List<ScheduleResponse> getAllSchedules(String statusFilter) {
 
-        return dbSchedules.stream().map(schedule -> {
-            ScheduleResponse response = ResponseConversion.toScheduleResponse(schedule);
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new RuntimeException("Unauthorized: No valid session found.");
+        }
+        UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
+        String userId = principal.userId();
+        String role = principal.role();
 
-            String userKey = "wtms:user:" + schedule.getDriverId();
-            String driverName = (String) redisTemplate.opsForHash().get(userKey, "name");
-            String driverPhone = (String) redisTemplate.opsForHash().get(userKey, "phoneNo");
-            String driverStatus = (String) redisTemplate.opsForHash().get(userKey, "status");
-            response.setDriverName(driverName != null ? driverName : "Unknown Name");
-            response.setDriverPhoneNo(driverPhone != null ? driverPhone : "Unknown Phone");
-            response.setDriverStatus(driverStatus != null ? driverStatus : "Unknown status");
+        List<Schedule> dbSchedules;
 
-            String vehicleKey = "wtms:vehicle:" + schedule.getVehicleNo();
-            String vehicleStatus = (String) redisTemplate.opsForHash().get(vehicleKey, "status");
-            response.setVehicleNo(schedule.getVehicleNo());
-            response.setVehicleStatus(vehicleStatus != null ? vehicleStatus : "Unknown Status");
+        if ("ADMIN".equals(role)) {
+            dbSchedules = scheduleRepository.findAll();
+        } else if ("DRIVER".equals(role)) {
+            dbSchedules = scheduleRepository.findByDriverId(UUID.fromString(userId));
+        } else if ("SUPERVISOR".equals(role)) {
+            String tehsilId = (String) redisTemplate.opsForHash().get("wtms:user:" + userId, "tehsilId");
+            if (tehsilId == null || tehsilId.isEmpty()) {
+                throw new ResourceNotFoundException("No territory assigned to this supervisor.");
+            }
 
-            String routeKey = "wtms:route:" + schedule.getRouteId();
-            String origin = (String) redisTemplate.opsForHash().get(routeKey, "origin");
-            String destination = (String) redisTemplate.opsForHash().get(routeKey, "destination");
-            response.setRouteOrigin(origin != null ? origin : "Unknown Origin");
-            response.setRouteDestination(destination != null ? destination : "Unknown Destination");
+            String relationKey = "wtms:tehsil:" + tehsilId + ":routes";
+            Set<Object> routeIdsObj = redisTemplate.opsForSet().members(relationKey);
 
-            return response;
+            if (routeIdsObj == null || routeIdsObj.isEmpty()) {
+                return Collections.emptyList();
+            }
 
-        }).collect(Collectors.toList());
+            List<UUID> routeIds = routeIdsObj.stream()
+                    .map(id -> UUID.fromString(id.toString()))
+                    .collect(Collectors.toList());
+
+            dbSchedules = scheduleRepository.findByRouteIdIn(routeIds);
+        } else {
+            throw new UnauthorizedException("You do not have permission to view schedules.");
+        }
+
+        // This temporary cache ensures we only hit Redis ONCE per unique Driver/Vehicle/Route
+        Map<String, Map<Object, Object>> localCache = new HashMap<>();
+
+        return dbSchedules.stream()
+                .filter(schedule -> statusFilter == null || schedule.getStatus().name().equalsIgnoreCase(statusFilter))
+                .sorted(Comparator.comparing(Schedule::getScheduleDate))
+                .map(schedule -> {
+                    ScheduleResponse response = ResponseConversion.toScheduleResponse(schedule);
+
+                    // 1. Driver Data
+                    String userKey = "wtms:user:" + schedule.getDriverId();
+                    Map<Object, Object> driverData = localCache.computeIfAbsent(userKey, k -> redisTemplate.opsForHash().entries(k));
+
+                    response.setDriverId(schedule.getDriverId());
+                    response.setDriverName(driverData.get("name") != null ? driverData.get("name").toString() : "Unknown Name");
+                    response.setDriverPhoneNo(driverData.get("phoneNo") != null ? driverData.get("phoneNo").toString() : "Unknown Phone");
+                    response.setDriverStatus(driverData.get("status") != null ? driverData.get("status").toString() : "Unknown status");
+
+                    // 2. Vehicle Data
+                    String vehicleKey = "wtms:vehicle:" + schedule.getVehicleNo();
+                    Map<Object, Object> vehicleData = localCache.computeIfAbsent(vehicleKey, k -> redisTemplate.opsForHash().entries(k));
+
+                    response.setVehicleNo(schedule.getVehicleNo());
+                    response.setVehicleStatus(vehicleData.get("status") != null ? vehicleData.get("status").toString() : "Unknown Status");
+
+                    // 3. Route & Tehsil Data
+                    String routeKey = "wtms:route:" + schedule.getRouteId();
+                    Map<Object, Object> routeData = localCache.computeIfAbsent(routeKey, k -> redisTemplate.opsForHash().entries(k));
+
+                    response.setRouteId(schedule.getRouteId());
+                    response.setRouteName(routeData.get("routeName") != null ? routeData.get("routeName").toString() : "Unknown Route");
+                    response.setTehsilName(routeData.get("tehsilName") != null ? routeData.get("tehsilName").toString() : "Unknown Tehsil");
+
+                    Object tehsilIdObj = routeData.get("tehsilId");
+                    if (tehsilIdObj != null && !tehsilIdObj.toString().isEmpty()) {
+                        response.setTehsilId(UUID.fromString(tehsilIdObj.toString()));
+                    }
+
+                    // 4. Template Data
+                    if (schedule.getTemplate() != null) {
+                        response.setTemplateId(schedule.getTemplate().getTemplateId());
+                    }
+
+                    return response;
+
+                }).collect(Collectors.toList());
     }
 
     // --- Redis Sync Helper (Schedule) ---

@@ -24,14 +24,14 @@ public class ScheduleController {
 
     // Add Schedule
     @PostMapping("/add")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR')")
+    @PreAuthorize("hasRole('SUPERVISOR')")
     public ResponseEntity<ScheduleResponse> createSchedule(@RequestBody ScheduleRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(scheduleService.createSchedule(request));
     }
 
     // Update Schedule
     @PatchMapping("/update")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR')") // FIXED: Proper Spring Security SpEL syntax
+    @PreAuthorize("hasRole('SUPERVISOR')")
     public ResponseEntity<String> updateSchedule(@RequestBody Map<String, Object> updates){
         scheduleService.updateSchedule(updates);
         return new ResponseEntity<>(
@@ -42,15 +42,16 @@ public class ScheduleController {
 
     // Get Schedule
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR')") // FIXED: Proper Spring Security SpEL syntax
-    public ResponseEntity<ScheduleResponse> getScheduleById(@PathVariable UUID id){ // FIXED: Changed @RequestParam to @PathVariable
+    @PreAuthorize("hasAnyRole('DRIVER', 'ADMIN', 'SUPERVISOR')")
+    public ResponseEntity<ScheduleResponse> getScheduleById(@PathVariable UUID id){
         return ResponseEntity.ok(scheduleService.getScheduleById(id));
     }
 
     // Get All Schedules
     @GetMapping("/all")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR')") // FIXED: Proper Spring Security SpEL syntax
-    public ResponseEntity<List<ScheduleResponse>> getAllSchedule(){
-        return ResponseEntity.ok(scheduleService.getAllSchedule());
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR', 'DRIVER')")
+    public ResponseEntity<List<ScheduleResponse>> getAllSchedule(
+            @RequestParam(required = false) String status) {
+        return ResponseEntity.ok(scheduleService.getAllSchedules(status));
     }
 }
