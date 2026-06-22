@@ -50,15 +50,15 @@ public class YardResponseEventDto {
     private String status;
 
     @JsonProperty("yardData")
-    private void unpackNestedRouteData(Map<String, Object> routeData) {
-        if (routeData != null) {
-            this.yardId = UUID.fromString((String) routeData.get("yardId"));
-            this.yardName = (String) routeData.get("yardName");
-            this.yardType = (String) routeData.get("yardType");
-            this.boundaryType = (String) routeData.get("boundaryType");
-            this.tehsilId = UUID.fromString((String) routeData.get("tehsilId"));
-            this.tehsilName = (String) routeData.get("tehsilName");
-            this.status = (String) routeData.get("status");
+    private void unpackNestedRouteData(Map<String, Object> yardData) {
+        if (yardData != null) {
+            this.yardId = UUID.fromString((String) yardData.get("yardId"));
+            this.yardName = (String) yardData.get("yardName");
+            this.yardType = (String) yardData.get("yardType");
+            this.boundaryType = (String) yardData.get("boundaryType");
+            this.tehsilId = UUID.fromString((String) yardData.get("tehsilId"));
+            this.tehsilName = (String) yardData.get("tehsilName");
+            this.status = (String) yardData.get("status");
         }
     }
 }

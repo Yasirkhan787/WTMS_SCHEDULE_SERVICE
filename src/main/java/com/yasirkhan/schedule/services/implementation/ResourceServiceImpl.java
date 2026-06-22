@@ -40,9 +40,30 @@ public class ResourceServiceImpl implements ResourceService {
     @Override
     public AvailableAssetResponse getAvailableAssets(AvailableAssetRequest request) {
 
-        List<Map<Object, Object>> activeVehicles = getAllActiveVehiclesFromCache();
+        // Get the current Supervisor's Tehsil ID from the Security Context
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
-        List<Map<Object, Object>> activeDrivers = getAllActiveDriversFromCache();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new RuntimeException("Unauthorized: No valid session found.");
+        }
+        UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
+        String supervisorId = principal.userId();
+        String userKey = "wtms:user:" + supervisorId;
+        String tehsilId = (String) redisTemplate.opsForHash().get(userKey, "tehsilId");
+
+        if (tehsilId == null || tehsilId.isEmpty()) {
+            throw new ResourceNotFoundException("No territory (Tehsil) assigned to this supervisor.");
+        }
+
+        // Filter Vehicles: Must be ACTIVE and belong to the Supervisor's Tehsil
+        List<Map<Object, Object>> activeVehicles = getAllVehiclesFromCache().stream()
+                .filter(v -> "ACTIVE".equals(v.get("status")) && tehsilId.equals(v.get("tehsilId")))
+                .toList();
+
+        // Filter Drivers: Must be ACTIVE and belong to the Supervisor's Tehsil
+        List<Map<Object, Object>> activeDrivers = getAllDriversFromCache().stream()
+                .filter(d -> "ACTIVE".equals(d.get("status")) && tehsilId.equals(d.get("tehsilId")))
+                .toList();
 
         // THE DOUBLE-BOOKING CHECK (Time Conflict)
         List<Schedule> dailySchedules = scheduleRepository.findByScheduleDate(request.getScheduleDate());
@@ -86,6 +107,7 @@ public class ResourceServiceImpl implements ResourceService {
                 .build();
     }
 
+    // TODO: UPDATE THIS METHOD
     private boolean isGeographicallyValid(String assetIdentifier, Map<Object, Object> targetRoute, ShiftTemplate targetShift, List<Schedule> dailySchedules) {
 
         Schedule precedingSchedule = dailySchedules.stream()
@@ -136,25 +158,6 @@ public class ResourceServiceImpl implements ResourceService {
         }
 
         List<Map<Object, Object>> activeRoutes = getActiveRoutesByTehsilFromCache(tehsilId);
-
-        /*
-        // List<Map<Object, Object>> activeYards = getActiveYardsByTehsilFromCache(tehsilId);
-        // 4. Categorize Yards
-        List<ResourceResponse.YardOption> collectionPoints = activeYards.stream()
-                .filter(y -> "COLLECTION_POINT".equals(y.get("yardType")))
-                .map(y -> ResourceResponse.YardOption.builder()
-                        .yardId(UUID.fromString(y.get("yardId").toString()))
-                        .yardName(y.get("yardName").toString()).build())
-                .collect(Collectors.toList());
-
-        List<ResourceResponse.YardOption> dumpSites = activeYards.stream()
-                .filter(y -> "DUMP_SITE".equals(y.get("yardType")))
-                .map(y -> ResourceResponse.YardOption.builder()
-                        .yardId(UUID.fromString(y.get("yardId").toString()))
-                        .yardName(y.get("yardName").toString()).build())
-                .collect(Collectors.toList());
-
-         */
 
         return AvailableResourceResponse.builder()
                 .activeRoutes(activeRoutes.stream().map(r -> ResourceResponse.RouteOption.builder()
@@ -218,31 +221,13 @@ public class ResourceServiceImpl implements ResourceService {
     }
 
     // Helpers Methods
-    public List<Map<Object, Object>> getAllActiveVehiclesFromCache() {
-        return getAllVehiclesFromCache().stream()
-                .filter(v -> "ACTIVE".equals(v.get("status")))
-                .toList();
-    }
-
-    public List<Map<Object, Object>> getAllActiveDriversFromCache() {
-        return getAllDriversFromCache().stream()
-                .filter(d -> "ACTIVE".equals(d.get("status")))
-                .toList();
-    }
-
-    public List<Map<Object, Object>> getAllActiveRoutesFromCache() {
-        return getAllRoutesFromCache().stream()
-                .filter(r -> "ACTIVE".equals(r.get("status")))
-                .toList();
-    }
-
-    public List<Map<Object, Object>> getAllActiveTemplatesFromCache() {
+    private List<Map<Object, Object>> getAllActiveTemplatesFromCache() {
         return getAllTemplatesFromCache().stream()
                 .filter(t -> "ACTIVE".equals(t.get("status")))
                 .toList();
     }
 
-    public List<Map<Object, Object>> getAllVehiclesFromCache() {
+    private List<Map<Object, Object>> getAllVehiclesFromCache() {
         List<Map<Object, Object>> allVehicles = new ArrayList<>();
         Set<String> keys = redisTemplate.keys("wtms:vehicle:*");
         if (keys != null) {
@@ -255,7 +240,7 @@ public class ResourceServiceImpl implements ResourceService {
         return allVehicles;
     }
 
-    public List<Map<Object, Object>> getAllDriversFromCache() {
+    private List<Map<Object, Object>> getAllDriversFromCache() {
         List<Map<Object, Object>> allDrivers = new ArrayList<>();
         Set<String> keys = redisTemplate.keys("wtms:user:*");
         if (keys != null) {
@@ -270,20 +255,7 @@ public class ResourceServiceImpl implements ResourceService {
         return allDrivers;
     }
 
-    public List<Map<Object, Object>> getAllRoutesFromCache() {
-        List<Map<Object, Object>> allRoutes = new ArrayList<>();
-        Set<String> keys = redisTemplate.keys("wtms:route:*");
-        if (keys != null) {
-            for (String key : keys) {
-                Map<Object, Object> data = redisTemplate.opsForHash().entries(key);
-                data.put("routeId", key.replace("wtms:route:", ""));
-                allRoutes.add(data);
-            }
-        }
-        return allRoutes;
-    }
-
-    public List<Map<Object, Object>> getAllTemplatesFromCache() {
+    private List<Map<Object, Object>> getAllTemplatesFromCache() {
         List<Map<Object, Object>> allTemplates = new ArrayList<>();
         Set<String> keys = redisTemplate.keys("wtms:template:*");
         if (keys != null) {

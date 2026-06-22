@@ -29,6 +29,9 @@ public class VehicleEventConsumer {
             String vehicleNo = event.getVehicleNo();
 
             Map<String, Object> map = new HashMap<>();
+            map.put("tehsilId", event.getTehsilId());
+            map.put("trackingId", event.getTrackingId());
+            map.put("mileage", event.getMileage());
             map.put("status", event.getStatus());
 
             // Save Hash to Redis (Using vehicleNo as the unique identifier)

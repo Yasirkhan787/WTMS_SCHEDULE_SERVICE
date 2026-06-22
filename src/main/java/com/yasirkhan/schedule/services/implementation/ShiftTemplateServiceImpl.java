@@ -89,7 +89,6 @@ public class ShiftTemplateServiceImpl implements ShiftTemplateService {
         try {
             ShiftTemplate updatedShiftTemplate = shiftTemplateRepository.save(dbShiftTemplate);
 
-            // Resync the entire updated entity safely to Redis
             syncShiftTemplateToRedis(updatedShiftTemplate);
 
             publishShiftTemplateEvent(EventType.UPDATE, EventStatus.SUCCESS, ResponseConversion.toShiftTemplateResponse(updatedShiftTemplate));
@@ -114,7 +113,7 @@ public class ShiftTemplateServiceImpl implements ShiftTemplateService {
                 .collect(Collectors.toList());
     }
 
-    // --- Redis Sync Helper (Shift Template) ---
+    // Helper Methods
     private void syncShiftTemplateToRedis(ShiftTemplate template) {
         String redisKey = "wtms:template:" + template.getTemplateId().toString();
         Map<String, Object> data = new HashMap<>();
@@ -128,7 +127,6 @@ public class ShiftTemplateServiceImpl implements ShiftTemplateService {
         redisTemplate.opsForHash().putAll(redisKey, data);
     }
 
-    // --- Kafka Publisher Helper ---
     private void publishShiftTemplateEvent(EventType type, EventStatus status, ShiftTemplateResponse response) {
         ShiftTemplateResponseEventDto eventDto = ShiftTemplateResponseEventDto.builder()
                 .type(type)

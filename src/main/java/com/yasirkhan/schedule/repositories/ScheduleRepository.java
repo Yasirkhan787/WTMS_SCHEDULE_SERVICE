@@ -1,13 +1,16 @@
 package com.yasirkhan.schedule.repositories;
 
 import com.yasirkhan.schedule.models.entities.Schedule;
+import com.yasirkhan.schedule.models.enums.Status;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -38,4 +41,12 @@ public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
     List<Schedule> findByDriverId(UUID driverId);
 
     List<Schedule> findByRouteIdIn(List<UUID> routeIds);
+
+    // Spring Boot automatically translates this exact name into:
+    // SELECT * FROM wtms_schedule WHERE vehicle_no = ? AND schedule_date = ? AND status = ?
+    List<Schedule> findByVehicleNoAndScheduleDateAndStatus(
+            String vehicleNo,
+            LocalDate scheduleDate,
+            Status status
+    );
 }

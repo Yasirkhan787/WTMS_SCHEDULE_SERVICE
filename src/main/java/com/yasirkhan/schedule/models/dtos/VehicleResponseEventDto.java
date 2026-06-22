@@ -19,17 +19,18 @@ public class VehicleResponseEventDto {
 
     private EventStatus eventTypeStatus; // SUCCESS, FAILURE
     private String vehicleNo;
+    private String tehsilId;
+    private String trackingId;
+    private String mileage;
     private String status;
 
-    /**
-     * This method acts as a bridge. When Jackson parses the JSON,
-     * it grabs the nested "vehicleData" object and runs this method,
-     * flattening the data into your fields.
-     */
     @JsonProperty("vehicleData")
     private void unpackNestedVehicleData(Map<String, Object> vehicleData) {
         if (vehicleData != null) {
             this.vehicleNo = (String) vehicleData.get("vehicleNo");
+            this.tehsilId = (String) vehicleData.get("tehsilId");
+            this.trackingId = (String) vehicleData.get("trackingId");
+            this.mileage = (String) vehicleData.get("mileage");
             this.status = (String) vehicleData.get("status");
         }
     }

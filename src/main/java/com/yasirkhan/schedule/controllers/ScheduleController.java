@@ -8,6 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -53,5 +55,20 @@ public class ScheduleController {
     public ResponseEntity<List<ScheduleResponse>> getAllSchedule(
             @RequestParam(required = false) String status) {
         return ResponseEntity.ok(scheduleService.getAllSchedules(status));
+    }
+
+    // Used by Tonnage/Trip Service via Feign Client
+    @GetMapping("/active-for-trip")
+    public ResponseEntity<ScheduleResponse> getActiveScheduleForTrip(
+            @RequestParam String vehicleNo,
+            @RequestParam String targetDate,
+            @RequestParam String targetTime) {
+
+        LocalDate date = LocalDate.parse(targetDate);
+        LocalTime actualTime = LocalTime.parse(targetTime);
+
+        // Pass the RAW time directly to the service.
+        // The service will expand the Shift Template by 60 mins internally to see if it fits!
+        return ResponseEntity.ok(scheduleService.findActiveScheduleForTrip(vehicleNo, date, actualTime));
     }
 }

@@ -39,10 +39,15 @@ public class UserEventConsumer {
             map.put("phoneNo", event.getPhoneNo());
             map.put("status", event.getStatus());
             map.put("role", event.getRole());
-            if ("SUPERVISOR".equals(event.getRole()) && event.getTehsilId() != null) {
+            if (("SUPERVISOR".equals(event.getRole()) || "DRIVER".equals(event.getRole())) && event.getTehsilId() != null) {
                 map.put("tehsilId", event.getTehsilId().toString());
             } else {
                 map.put("tehsilId", "");
+            }
+            if ("SUPERVISOR".equals(event.getRole()) && event.getYardId() != null) {
+                map.put("yardId", event.getYardId().toString());
+            } else {
+                map.put("yardId", "");
             }
             log.info("Saving Data TO Redis");
             String redisKey = "wtms:user:" + userId;

@@ -24,7 +24,7 @@ public class Schedule {
 
     private String scheduleName;
 
-    private UUID yardId;
+    private UUID tehsilId;
 
     private String vehicleNo;
 

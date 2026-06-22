@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-//import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,23 +17,28 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Base64;
 import java.util.List;
 
 @Component
 public class AuthorizationFilter extends OncePerRequestFilter {
 
+    // Used for normal user traffic hitting via API Gateway
     @Value("${app.security.internal-secret}")
     private String GATEWAY_SECRET = "";
 
+    // Used strictly for server-to-server signature validation
+    @Value("${app.security.internal-secret:my-super-secret-service-key}")
+    private String INTERNAL_SECRET = "";
+
     private final DownstreamJwtService jwtService;
-    //private final StringRedisTemplate redisTemplate;
     private final HandlerExceptionResolver exceptionResolver;
 
     public AuthorizationFilter(DownstreamJwtService jwtService,
-                               //StringRedisTemplate redisTemplate,
                                @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) {
         this.jwtService = jwtService;
-        //this.redisTemplate = redisTemplate;
         this.exceptionResolver = exceptionResolver;
     }
 
@@ -49,9 +53,55 @@ public class AuthorizationFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         try {
-            String incomingSecret = request.getHeader("X-Gateway-Secret");
+            // =================================================================================
+            // 1. INTERNAL MICROSERVICE COMMUNICATION (HMAC SIGNATURE VERIFICATION)
+            // =================================================================================
+            String serviceName = request.getHeader("X-Service-Name");
+            String timestampStr = request.getHeader("X-Timestamp");
+            String incomingSignature = request.getHeader("X-Signature");
 
-            if (incomingSecret == null || !incomingSecret.equals(GATEWAY_SECRET)) {
+            // If these headers exist, the request claims to be an internal microservice
+            if (serviceName != null && timestampStr != null && incomingSignature != null) {
+                long timestamp = Long.parseLong(timestampStr);
+                long currentTime = System.currentTimeMillis();
+
+                // REPLAY PROTECTION: Reject the request if it is older than 60 seconds
+                if (currentTime - timestamp > 60000) {
+                    throw new UnauthorizedException("Internal Request Expired (Replay Attack Prevented)");
+                }
+
+                // RECREATE THE SIGNATURE using the hidden server secret
+                String rawData = serviceName + timestamp + INTERNAL_SECRET;
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                byte[] hash = digest.digest(rawData.getBytes(StandardCharsets.UTF_8));
+                String expectedSignature = Base64.getEncoder().encodeToString(hash);
+
+                // VERIFY THE SIGNATURE
+                if (expectedSignature.equals(incomingSignature)) {
+                    // Grant the internal service access without a JWT
+                    UserPrincipal systemPrincipal = new UserPrincipal("system-uuid", "internal_service", "SYSTEM_SERVICE");
+                    UsernamePasswordAuthenticationToken systemAuth = new UsernamePasswordAuthenticationToken(
+                            systemPrincipal,
+                            null,
+                            List.of(new SimpleGrantedAuthority("ROLE_SYSTEM_SERVICE"))
+                    );
+                    SecurityContextHolder.getContext().setAuthentication(systemAuth);
+
+                    // Let the request proceed directly to the controller!
+                    filterChain.doFilter(request, response);
+                    return;
+                } else {
+                    throw new UnauthorizedException("Invalid Internal Service Signature");
+                }
+            }
+
+
+            // =================================================================================
+            // 2. NORMAL EXTERNAL USER TRAFFIC (GATEWAY + JWT VERIFICATION)
+            // =================================================================================
+            String incomingGatewaySecret = request.getHeader("X-Gateway-Secret");
+
+            if (incomingGatewaySecret == null || !incomingGatewaySecret.equals(GATEWAY_SECRET)) {
                 throw new UnauthorizedException("Direct access blocked: Request must come through API Gateway");
             }
 
@@ -68,20 +118,12 @@ public class AuthorizationFilter extends OncePerRequestFilter {
             String username = jwtService.extractUsername(token);
             String role = jwtService.extractRole(token);
             String userId = jwtService.extractUserId(token);
-            Integer tokenVersion = jwtService.extractTokenVersion(token);
+
+            // Note: Put your Redis Revocation Check back here if you re-enable it
 
             request.setAttribute("userId", userId);
             request.setAttribute("username", username);
             request.setAttribute("role", role);
-
-            // 4Redis Revocation Check
-            String redisKey = "user:" + userId + ":tokenVersion";
-            // String currentRedisVersion = redisTemplate.opsForValue().get(redisKey);
-
-            /* if (currentRedisVersion == null || !currentRedisVersion.equals(String.valueOf(tokenVersion))) {
-                throw new UnauthorizedException("Session expired or revoked. Please log in again.");
-            }
-            */
 
             // Authenticate in Spring Context
             if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {

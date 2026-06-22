@@ -24,6 +24,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -65,7 +66,6 @@ public class ScheduleServiceImpl implements ScheduleService {
 
         Schedule schedule = new Schedule();
         schedule.setScheduleName(request.getScheduleName());
-        schedule.setYardId(request.getYardId());
         schedule.setVehicleNo(request.getVehicleNo());
         schedule.setDriverId(request.getDriverId());
         schedule.setRouteId(request.getRouteId());
@@ -91,7 +91,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             response.setVehicleStatus((String) redisTemplate.opsForHash().get(vehicleKey, "status"));
 
             String routeKey = "wtms:route:" + schedule.getRouteId();
-            response.setScheduleName((String) redisTemplate.opsForHash().get(routeKey, "routeName"));
+            response.setRouteName((String) redisTemplate.opsForHash().get(routeKey, "routeName"));
             response.setTehsilId(UUID.fromString((String) redisTemplate.opsForHash().get(routeKey, "tehsilId")));
             response.setTehsilName((String) redisTemplate.opsForHash().get(routeKey, "tehsilId"));
 
@@ -168,18 +168,31 @@ public class ScheduleServiceImpl implements ScheduleService {
                 throw new ResourceNotFoundException("No territory assigned to this supervisor.");
             }
 
-            String relationKey = "wtms:tehsil:" + tehsilId + ":routes";
-            Set<Object> routeIdsObj = redisTemplate.opsForSet().members(relationKey);
+            // FIX: Scan the route hashes to find which routes belong to this Supervisor's Tehsil
+            List<UUID> routeIds = new ArrayList<>();
+            Set<String> routeKeys = redisTemplate.keys("wtms:route:*");
 
-            if (routeIdsObj == null || routeIdsObj.isEmpty()) {
+            if (routeKeys != null && !routeKeys.isEmpty()) {
+                for (String key : routeKeys) {
+                    // Get the tehsilId stored inside the specific route
+                    String cachedTehsilId = (String) redisTemplate.opsForHash().get(key, "tehsilId");
+
+                    // If the route belongs to the supervisor's territory, add it to our list
+                    if (tehsilId.equals(cachedTehsilId)) {
+                        String routeIdStr = key.replace("wtms:route:", "");
+                        routeIds.add(UUID.fromString(routeIdStr));
+                    }
+                }
+            }
+
+            // If this Tehsil has no routes, they have no schedules
+            if (routeIds.isEmpty()) {
                 return Collections.emptyList();
             }
 
-            List<UUID> routeIds = routeIdsObj.stream()
-                    .map(id -> UUID.fromString(id.toString()))
-                    .collect(Collectors.toList());
-
+            // Query the DB for schedules matching those Route IDs
             dbSchedules = scheduleRepository.findByRouteIdIn(routeIds);
+
         } else {
             throw new UnauthorizedException("You do not have permission to view schedules.");
         }
@@ -230,6 +243,42 @@ public class ScheduleServiceImpl implements ScheduleService {
                     return response;
 
                 }).collect(Collectors.toList());
+    }
+
+    @Override
+    public ScheduleResponse findActiveScheduleForTrip(String vehicleNo, LocalDate date, LocalTime actualTime) {
+
+        // 1. Fetch all schedules for this vehicle on this day
+        List<Schedule> dailySchedules = scheduleRepository.findByVehicleNoAndScheduleDateAndStatus(
+                vehicleNo, date, Status.ASSIGNED);
+
+        // 2. Find the one that fits our "Expanded Bucket"
+        Schedule matchedSchedule = dailySchedules.stream()
+                .filter(schedule -> {
+                    LocalTime shiftStart = schedule.getTemplate().getStartTime();
+                    LocalTime shiftEnd = schedule.getTemplate().getEndTime();
+
+                    // Expand the bucket by 60 minutes on both sides
+                    LocalTime bufferedStart = shiftStart.minusMinutes(60);
+                    LocalTime bufferedEnd = shiftEnd.plusMinutes(60);
+
+                    // Check if it's a standard Daytime shift or an Overnight shift
+                    boolean isOvernightShift = bufferedStart.isAfter(bufferedEnd);
+
+                    if (isOvernightShift) {
+                        // OVERNIGHT LOGIC: (e.g., 9 PM to 7 AM).
+                        // Time must be AFTER 9 PM **OR** BEFORE 7 AM
+                        return actualTime.isAfter(bufferedStart) || actualTime.isBefore(bufferedEnd);
+                    } else {
+                        // DAYTIME LOGIC: (e.g., 7 AM to 5 PM).
+                        // Time must be AFTER 7 AM **AND** BEFORE 5 PM
+                        return actualTime.isAfter(bufferedStart) && actualTime.isBefore(bufferedEnd);
+                    }
+                })
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("No schedule found within the buffered time window"));
+
+        return ResponseConversion.toScheduleResponse(matchedSchedule);
     }
 
     // --- Redis Sync Helper (Schedule) ---

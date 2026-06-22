@@ -18,10 +18,11 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class UserResponseEventDto {
 
-    private EventStatus eventTypeStatus; // SUCCESS, FAILURE
+    private EventStatus eventTypeStatus;
 
     private UUID userId;
     private UUID tehsilId;
+    private UUID yardId;
     private String name;
     private String phoneNo;
     private String role;
@@ -30,13 +31,21 @@ public class UserResponseEventDto {
     @JsonProperty("userData")
     private void unpackNestedUserData(Map<String, Object> userData) {
         if (userData != null) {
+
             if (userData.get("userId") != null) {
                 this.userId = UUID.fromString((String) userData.get("userId"));
             }
+
             if (userData.get("tehsilId") != null) {
                 this.tehsilId = UUID.fromString((String) userData.get("tehsilId"));
             } else {
-                this.tehsilId = null; // Explicitly handle the null case
+                this.tehsilId = null;
+            }
+
+            if (userData.get("yardId") != null) {
+                this.yardId = UUID.fromString((String) userData.get("yardId"));
+            } else {
+                this.yardId = null;
             }
 
             this.name = (String) userData.get("name");
