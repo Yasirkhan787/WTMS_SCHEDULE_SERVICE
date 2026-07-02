@@ -24,6 +24,7 @@ public class ResponseConversion {
                 .build();
 
         if (savedSchedule.getTemplate() != null) {
+            response.setTemplateId(savedSchedule.getTemplate().getTemplateId());
             response.setShiftName(savedSchedule.getTemplate().getShiftName());
             response.setStartTime(savedSchedule.getTemplate().getStartTime());
             response.setEndTime(savedSchedule.getTemplate().getEndTime());

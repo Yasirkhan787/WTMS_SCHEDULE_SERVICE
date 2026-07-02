@@ -38,7 +38,6 @@ public class YardEventConsumer {
             map.put("tehsilName",event.getTehsilName());
             map.put("status", event.getStatus());
 
-            // Save Hash to Redis
             String redisKey = "wtms:yard:" + yardId;
             redisTemplate.opsForHash().putAll(redisKey, map);
         }

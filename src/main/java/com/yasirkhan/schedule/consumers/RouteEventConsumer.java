@@ -29,20 +29,36 @@ public class RouteEventConsumer {
         if (EventStatus.SUCCESS.equals(event.getEventTypeStatus())) {
             UUID routeId = event.getRouteId();
 
+            if (routeId == null) {
+                return;
+            }
+
             Map<String, Object> map = new HashMap<>();
+
             map.put("routeName", event.getRouteName());
-            map.put("routePath", event.getRoutePath());
-            map.put("tehsilId", event.getTehsilId());
+            map.put("path", event.getRoutePath());
+            map.put("tehsilId", event.getTehsilId() != null ? event.getTehsilId().toString() : null);
             map.put("tehsilName", event.getTehsilName());
-            map.put("sourceYardId", event.getSourceYardId());
+            map.put("sourceYardId", event.getSourceYardId() != null ? event.getSourceYardId().toString() : null);
             map.put("sourceYardName", event.getSourceYardName());
             map.put("sourceYardType", event.getSourceYardType());
-            map.put("destinationYardId", event.getDestinationYardId());
+            map.put("destinationYardId", event.getDestinationYardId() != null ? event.getDestinationYardId().toString() : null);
             map.put("destinationYardName", event.getDestinationYardName());
             map.put("destinationYardType", event.getDestinationYardType());
             map.put("status", event.getStatus());
 
-            // Save Hash to Redis
+            if (event.getYardData() != null) {
+                RouteResponseEventDto.YardResponse yard = event.getYardData();
+                map.put("destinationYardBoundaryType", yard.getBoundaryType());
+                map.put("destinationYardRadiusMeters", yard.getRadiusMeters()  != null ? yard.getRadiusMeters() : null);
+                map.put("destinationYardPolygonPath", yard.getPolygonPath() != null ? yard.getPolygonPath() : null);
+
+                if (yard.getCenterCoords() != null) {
+                    map.put("destinationYardCenterLat", yard.getCenterCoords().getLat());
+                    map.put("destinationYardCenterLng", yard.getCenterCoords().getLng());
+                }
+            }
+
             String redisKey = "wtms:route:" + routeId;
             redisTemplate.opsForHash().putAll(redisKey, map);
         }

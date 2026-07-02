@@ -28,8 +28,7 @@ public class UserEventConsumer {
     )
     public void handleUserResponse(UserResponseEventDto event) {
 
-        // Add this line immediately
-        log.info("EVENT RECEIVED: Status={}, User={}", event.getEventTypeStatus(), event.getUserId());
+        log.info("EVENT RECEIVED: Status={}, User={} Data={}", event.getEventTypeStatus(), event.getUserId(), event);
 
         if (EventStatus.SUCCESS.equals(event.getEventTypeStatus())) {
             UUID userId = event.getUserId();
@@ -39,6 +38,7 @@ public class UserEventConsumer {
             map.put("phoneNo", event.getPhoneNo());
             map.put("status", event.getStatus());
             map.put("role", event.getRole());
+
             if (("SUPERVISOR".equals(event.getRole()) || "DRIVER".equals(event.getRole())) && event.getTehsilId() != null) {
                 map.put("tehsilId", event.getTehsilId().toString());
             } else {
@@ -49,7 +49,7 @@ public class UserEventConsumer {
             } else {
                 map.put("yardId", "");
             }
-            log.info("Saving Data TO Redis");
+
             String redisKey = "wtms:user:" + userId;
             redisTemplate.opsForHash().putAll(redisKey, map);
         }

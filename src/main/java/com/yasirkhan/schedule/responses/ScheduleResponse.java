@@ -42,4 +42,14 @@ public class ScheduleResponse {
     private UUID routeId;
     private String routeName;
     private String routePath;
+
+    // destination Yard details
+    private String destinationYardId;
+    private String destinationYardName;
+    private String destinationYardType;
+    private String destinationYardBoundaryType;
+    private String destinationYardRadiusMeters;
+    private String destinationYardPolygonPath;
+    private String destinationYardCenterLat;
+    private String destinationYardCenterLng;
 }

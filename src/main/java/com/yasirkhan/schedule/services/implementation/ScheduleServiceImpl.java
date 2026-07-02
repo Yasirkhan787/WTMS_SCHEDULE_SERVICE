@@ -82,18 +82,8 @@ public class ScheduleServiceImpl implements ScheduleService {
 
             ScheduleResponse response = ResponseConversion.toScheduleResponse(savedSchedule);
 
-            String userKey = "wtms:user:" + schedule.getDriverId();
-            response.setDriverName((String) redisTemplate.opsForHash().get(userKey, "name"));
-            response.setDriverPhoneNo((String) redisTemplate.opsForHash().get(userKey, "phoneNo"));
-            response.setDriverStatus((String) redisTemplate.opsForHash().get(userKey, "status"));
-
-            String vehicleKey = "wtms:vehicle:" + schedule.getVehicleNo();
-            response.setVehicleStatus((String) redisTemplate.opsForHash().get(vehicleKey, "status"));
-
-            String routeKey = "wtms:route:" + schedule.getRouteId();
-            response.setRouteName((String) redisTemplate.opsForHash().get(routeKey, "routeName"));
-            response.setTehsilId(UUID.fromString((String) redisTemplate.opsForHash().get(routeKey, "tehsilId")));
-            response.setTehsilName((String) redisTemplate.opsForHash().get(routeKey, "tehsilId"));
+            // Enrich with Redis Data
+            enrichResponseFromRedis(savedSchedule, response, new HashMap<>());
 
             publishScheduleEvent(EventType.CREATE, EventStatus.SUCCESS, response);
 
@@ -131,6 +121,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             syncScheduleToRedis(savedSchedule);
 
             ScheduleResponse response = ResponseConversion.toScheduleResponse(savedSchedule);
+            enrichResponseFromRedis(savedSchedule, response, new HashMap<>());
             publishScheduleEvent(EventType.UPDATE, EventStatus.SUCCESS, response);
 
         } catch (Exception e){
@@ -142,7 +133,10 @@ public class ScheduleServiceImpl implements ScheduleService {
     public ScheduleResponse getScheduleById(UUID scheduleId) {
         Schedule schedule = scheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Schedule with ID: " + scheduleId + " Not Found."));
-        return ResponseConversion.toScheduleResponse(schedule);
+
+        ScheduleResponse response = ResponseConversion.toScheduleResponse(schedule);
+        enrichResponseFromRedis(schedule, response, new HashMap<>());
+        return response;
     }
 
     @Override
@@ -168,16 +162,12 @@ public class ScheduleServiceImpl implements ScheduleService {
                 throw new ResourceNotFoundException("No territory assigned to this supervisor.");
             }
 
-            // FIX: Scan the route hashes to find which routes belong to this Supervisor's Tehsil
             List<UUID> routeIds = new ArrayList<>();
             Set<String> routeKeys = redisTemplate.keys("wtms:route:*");
 
             if (routeKeys != null && !routeKeys.isEmpty()) {
                 for (String key : routeKeys) {
-                    // Get the tehsilId stored inside the specific route
                     String cachedTehsilId = (String) redisTemplate.opsForHash().get(key, "tehsilId");
-
-                    // If the route belongs to the supervisor's territory, add it to our list
                     if (tehsilId.equals(cachedTehsilId)) {
                         String routeIdStr = key.replace("wtms:route:", "");
                         routeIds.add(UUID.fromString(routeIdStr));
@@ -185,12 +175,10 @@ public class ScheduleServiceImpl implements ScheduleService {
                 }
             }
 
-            // If this Tehsil has no routes, they have no schedules
             if (routeIds.isEmpty()) {
                 return Collections.emptyList();
             }
 
-            // Query the DB for schedules matching those Route IDs
             dbSchedules = scheduleRepository.findByRouteIdIn(routeIds);
 
         } else {
@@ -205,83 +193,99 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .map(schedule -> {
                     ScheduleResponse response = ResponseConversion.toScheduleResponse(schedule);
 
-                    // 1. Driver Data
-                    String userKey = "wtms:user:" + schedule.getDriverId();
-                    Map<Object, Object> driverData = localCache.computeIfAbsent(userKey, k -> redisTemplate.opsForHash().entries(k));
+                    // Use helper method mapped with local cache for efficiency
+                    enrichResponseFromRedis(schedule, response, localCache);
 
-                    response.setDriverId(schedule.getDriverId());
-                    response.setDriverName(driverData.get("name") != null ? driverData.get("name").toString() : "Unknown Name");
-                    response.setDriverPhoneNo(driverData.get("phoneNo") != null ? driverData.get("phoneNo").toString() : "Unknown Phone");
-                    response.setDriverStatus(driverData.get("status") != null ? driverData.get("status").toString() : "Unknown status");
-
-                    // 2. Vehicle Data
-                    String vehicleKey = "wtms:vehicle:" + schedule.getVehicleNo();
-                    Map<Object, Object> vehicleData = localCache.computeIfAbsent(vehicleKey, k -> redisTemplate.opsForHash().entries(k));
-
-                    response.setVehicleNo(schedule.getVehicleNo());
-                    response.setVehicleStatus(vehicleData.get("status") != null ? vehicleData.get("status").toString() : "Unknown Status");
-
-                    // 3. Route & Tehsil Data
-                    String routeKey = "wtms:route:" + schedule.getRouteId();
-                    Map<Object, Object> routeData = localCache.computeIfAbsent(routeKey, k -> redisTemplate.opsForHash().entries(k));
-
-                    response.setRouteId(schedule.getRouteId());
-                    response.setRoutePath(routeData.get("routePath") != null ? routeData.get("routePath").toString() : "Unknown Route Path");
-                    response.setRouteName(routeData.get("routeName") != null ? routeData.get("routeName").toString() : "Unknown Route");
-                    response.setTehsilName(routeData.get("tehsilName") != null ? routeData.get("tehsilName").toString() : "Unknown Tehsil");
-
-                    Object tehsilIdObj = routeData.get("tehsilId");
-                    if (tehsilIdObj != null && !tehsilIdObj.toString().isEmpty()) {
-                        response.setTehsilId(UUID.fromString(tehsilIdObj.toString()));
-                    }
-
-                    // 4. Template Data
                     if (schedule.getTemplate() != null) {
                         response.setTemplateId(schedule.getTemplate().getTemplateId());
                     }
 
                     return response;
-
                 }).collect(Collectors.toList());
     }
 
     @Override
     public ScheduleResponse findActiveScheduleForTrip(String vehicleNo, LocalDate date, LocalTime actualTime) {
 
-        // 1. Fetch all schedules for this vehicle on this day
         List<Schedule> dailySchedules = scheduleRepository.findByVehicleNoAndScheduleDateAndStatus(
                 vehicleNo, date, Status.ASSIGNED);
 
-        // 2. Find the one that fits our "Expanded Bucket"
         Schedule matchedSchedule = dailySchedules.stream()
                 .filter(schedule -> {
                     LocalTime shiftStart = schedule.getTemplate().getStartTime();
                     LocalTime shiftEnd = schedule.getTemplate().getEndTime();
 
-                    // Expand the bucket by 60 minutes on both sides
                     LocalTime bufferedStart = shiftStart.minusMinutes(60);
                     LocalTime bufferedEnd = shiftEnd.plusMinutes(60);
 
-                    // Check if it's a standard Daytime shift or an Overnight shift
                     boolean isOvernightShift = bufferedStart.isAfter(bufferedEnd);
 
                     if (isOvernightShift) {
-                        // OVERNIGHT LOGIC: (e.g., 9 PM to 7 AM).
-                        // Time must be AFTER 9 PM **OR** BEFORE 7 AM
                         return actualTime.isAfter(bufferedStart) || actualTime.isBefore(bufferedEnd);
                     } else {
-                        // DAYTIME LOGIC: (e.g., 7 AM to 5 PM).
-                        // Time must be AFTER 7 AM **AND** BEFORE 5 PM
                         return actualTime.isAfter(bufferedStart) && actualTime.isBefore(bufferedEnd);
                     }
                 })
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("No schedule found within the buffered time window"));
 
-        return ResponseConversion.toScheduleResponse(matchedSchedule);
+        ScheduleResponse response = ResponseConversion.toScheduleResponse(matchedSchedule);
+        enrichResponseFromRedis(matchedSchedule, response, new HashMap<>());
+        return response;
     }
 
-    // --- Redis Sync Helper (Schedule) ---
+
+    // ==========================================
+    //            PRIVATE HELPERS
+    // ==========================================
+
+    private void enrichResponseFromRedis(Schedule schedule, ScheduleResponse response, Map<String, Map<Object, Object>> cache) {
+        // 1. Driver Data
+        if (schedule.getDriverId() != null) {
+            String userKey = "wtms:user:" + schedule.getDriverId();
+            Map<Object, Object> driverData = cache.computeIfAbsent(userKey, k -> redisTemplate.opsForHash().entries(k));
+            response.setDriverId(schedule.getDriverId());
+            response.setDriverName(driverData.get("name") != null ? driverData.get("name").toString() : "Unknown Name");
+            response.setDriverPhoneNo(driverData.get("phoneNo") != null ? driverData.get("phoneNo").toString() : "Unknown Phone");
+            response.setDriverStatus(driverData.get("status") != null ? driverData.get("status").toString() : "Unknown status");
+        }
+
+        // 2. Vehicle Data
+        if (schedule.getVehicleNo() != null) {
+            String vehicleKey = "wtms:vehicle:" + schedule.getVehicleNo();
+            Map<Object, Object> vehicleData = cache.computeIfAbsent(vehicleKey, k -> redisTemplate.opsForHash().entries(k));
+            response.setVehicleNo(schedule.getVehicleNo());
+            response.setVehicleStatus(vehicleData.get("status") != null ? vehicleData.get("status").toString() : "Unknown Status");
+        }
+
+        // 3. Route & Destination Yard Data
+        if (schedule.getRouteId() != null) {
+            String routeKey = "wtms:route:" + schedule.getRouteId();
+            Map<Object, Object> routeData = cache.computeIfAbsent(routeKey, k -> redisTemplate.opsForHash().entries(k));
+
+            // Core Route
+            response.setRouteId(schedule.getRouteId());
+            response.setRoutePath(routeData.get("path") != null ? routeData.get("path").toString() : "Unknown Route Path");
+            response.setRouteName(routeData.get("routeName") != null ? routeData.get("routeName").toString() : "Unknown Route");
+            response.setTehsilName(routeData.get("tehsilName") != null ? routeData.get("tehsilName").toString() : "Unknown Tehsil");
+
+            Object tehsilIdObj = routeData.get("tehsilId");
+            if (tehsilIdObj != null && !tehsilIdObj.toString().isEmpty()) {
+                response.setTehsilId(UUID.fromString(tehsilIdObj.toString()));
+            }
+
+            // Destination Yard Fields
+            response.setDestinationYardId(routeData.get("destinationYardId") != null ? routeData.get("destinationYardId").toString() : null);
+            response.setDestinationYardName(routeData.get("destinationYardName") != null ? routeData.get("destinationYardName").toString() : null);
+            response.setDestinationYardType(routeData.get("destinationYardType") != null ? routeData.get("destinationYardType").toString() : null);
+            response.setDestinationYardBoundaryType(routeData.get("destinationYardBoundaryType") != null ? routeData.get("destinationYardBoundaryType").toString() : null);
+            response.setDestinationYardRadiusMeters(routeData.get("destinationYardRadiusMeters") != null ? routeData.get("destinationYardRadiusMeters").toString() : null);
+            response.setDestinationYardPolygonPath(routeData.get("destinationYardPolygonPath") != null ? routeData.get("destinationYardPolygonPath").toString() : null);
+            response.setDestinationYardCenterLat(routeData.get("destinationYardCenterLat") != null ? routeData.get("destinationYardCenterLat").toString() : null);
+            response.setDestinationYardCenterLng(routeData.get("destinationYardCenterLng") != null ? routeData.get("destinationYardCenterLng").toString() : null);
+        }
+    }
+
     private void syncScheduleToRedis(Schedule schedule) {
         String redisKey = "wtms:schedule:" + schedule.getScheduleId().toString();
         Map<String, Object> data = new HashMap<>();
@@ -297,7 +301,6 @@ public class ScheduleServiceImpl implements ScheduleService {
         redisTemplate.opsForHash().putAll(redisKey, data);
     }
 
-    // --- Kafka Publisher Helper ---
     private void publishScheduleEvent(EventType type, EventStatus status, ScheduleResponse response) {
         ScheduleResponseEventDto eventDto = ScheduleResponseEventDto.builder()
                 .type(type)
