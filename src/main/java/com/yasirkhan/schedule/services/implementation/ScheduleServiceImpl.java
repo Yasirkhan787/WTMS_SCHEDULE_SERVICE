@@ -70,6 +70,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         schedule.setDriverId(request.getDriverId());
         schedule.setRouteId(request.getRouteId());
         schedule.setScheduleDate(request.getScheduleDate());
+        schedule.setTehsilId(getTehsilIdFromRoute(request.getRouteId()));
         schedule.setStatus(Status.ASSIGNED);
 
         ShiftTemplate templateProxy = templateRepository.getReferenceById(request.getTemplateId());
@@ -82,7 +83,6 @@ public class ScheduleServiceImpl implements ScheduleService {
 
             ScheduleResponse response = ResponseConversion.toScheduleResponse(savedSchedule);
 
-            // Enrich with Redis Data
             enrichResponseFromRedis(savedSchedule, response, new HashMap<>());
 
             publishScheduleEvent(EventType.CREATE, EventStatus.SUCCESS, response);
@@ -108,7 +108,10 @@ public class ScheduleServiceImpl implements ScheduleService {
                     case "scheduleName" -> dbSchedule.setScheduleName((String) value);
                     case "vehicleId", "vehicleNo" -> dbSchedule.setVehicleNo(value.toString());
                     case "driverId" -> dbSchedule.setDriverId(UUID.fromString(value.toString()));
-                    case "routeId" -> dbSchedule.setRouteId(UUID.fromString(value.toString()));
+                    case "routeId" -> {
+                        dbSchedule.setRouteId(UUID.fromString(value.toString()));
+                        dbSchedule.setTehsilId(getTehsilIdFromRoute(UUID.fromString(value.toString())));
+                    }
                     case "scheduleDate" -> dbSchedule.setScheduleDate(LocalDate.parse(value.toString()));
                     case "shiftStatus" -> dbSchedule.setStatus(Status.valueOf(value.toString()));
                 }
@@ -240,7 +243,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     // ==========================================
 
     private void enrichResponseFromRedis(Schedule schedule, ScheduleResponse response, Map<String, Map<Object, Object>> cache) {
-        // 1. Driver Data
+        // Driver Data
         if (schedule.getDriverId() != null) {
             String userKey = "wtms:user:" + schedule.getDriverId();
             Map<Object, Object> driverData = cache.computeIfAbsent(userKey, k -> redisTemplate.opsForHash().entries(k));
@@ -250,7 +253,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             response.setDriverStatus(driverData.get("status") != null ? driverData.get("status").toString() : "Unknown status");
         }
 
-        // 2. Vehicle Data
+        // Vehicle Data
         if (schedule.getVehicleNo() != null) {
             String vehicleKey = "wtms:vehicle:" + schedule.getVehicleNo();
             Map<Object, Object> vehicleData = cache.computeIfAbsent(vehicleKey, k -> redisTemplate.opsForHash().entries(k));
@@ -258,7 +261,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             response.setVehicleStatus(vehicleData.get("status") != null ? vehicleData.get("status").toString() : "Unknown Status");
         }
 
-        // 3. Route & Destination Yard Data
+        // Route & Destination Yard Data
         if (schedule.getRouteId() != null) {
             String routeKey = "wtms:route:" + schedule.getRouteId();
             Map<Object, Object> routeData = cache.computeIfAbsent(routeKey, k -> redisTemplate.opsForHash().entries(k));
@@ -284,6 +287,16 @@ public class ScheduleServiceImpl implements ScheduleService {
             response.setDestinationYardCenterLat(routeData.get("destinationYardCenterLat") != null ? routeData.get("destinationYardCenterLat").toString() : null);
             response.setDestinationYardCenterLng(routeData.get("destinationYardCenterLng") != null ? routeData.get("destinationYardCenterLng").toString() : null);
         }
+    }
+
+    private UUID getTehsilIdFromRoute(UUID routeId) {
+
+        String routeKey = "wtms:route:" + routeId;
+        Object tehsilIdObj = redisTemplate.opsForHash().get(routeKey, "tehsilId");
+        if (tehsilIdObj != null) {
+            return UUID.fromString(tehsilIdObj.toString());
+        }
+        return null;
     }
 
     private void syncScheduleToRedis(Schedule schedule) {

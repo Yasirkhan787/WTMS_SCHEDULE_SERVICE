@@ -34,10 +34,15 @@ public class Schedule {
 
     private LocalDate scheduleDate;
 
+    @Column(nullable = false)
+    private Integer completedTrips = 0;
+
     // Many dispatches/schedules can use the exact same Shift Template
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "template_id", referencedColumnName = "templateId")
     private ShiftTemplate template;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private Status status;
 }
