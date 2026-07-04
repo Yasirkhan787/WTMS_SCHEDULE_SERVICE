@@ -1,4 +1,4 @@
-package com.yasirkhan.schedule.services.implementation;
+package com.yasirkhan.schedule.services.implementations;
 
 import com.yasirkhan.schedule.models.UserPrincipal;
 import lombok.extern.slf4j.Slf4j;
@@ -14,11 +14,9 @@ import com.yasirkhan.schedule.responses.AvailableAssetResponse;
 import com.yasirkhan.schedule.responses.AvailableResourceResponse;
 import com.yasirkhan.schedule.responses.ResourceResponse;
 import com.yasirkhan.schedule.services.ResourceService;
-import com.yasirkhan.schedule.utils.ResponseConversion;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 

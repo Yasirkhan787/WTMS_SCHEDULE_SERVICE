@@ -1,4 +1,4 @@
-package com.yasirkhan.schedule.services.implementation;
+package com.yasirkhan.schedule.services.implementations;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;

@@ -3,8 +3,6 @@ package com.yasirkhan.schedule.services;
 import com.yasirkhan.schedule.requests.ScheduleRequest;
 import com.yasirkhan.schedule.responses.ScheduleResponse;
 
-import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,7 +15,7 @@ public interface ScheduleService {
 
     ScheduleResponse getScheduleById(UUID scheduleId);
 
-    List<ScheduleResponse> getAllSchedules(String statusFilter);
+    List<ScheduleResponse> getAllSchedules();
 
-    ScheduleResponse findActiveScheduleForTrip(String vehicleNo, LocalDate date, LocalTime bufferedTime);
+    ScheduleResponse getCurrentSchedule();
 }

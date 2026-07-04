@@ -3,6 +3,7 @@ package com.yasirkhan.schedule.models.dtos;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.yasirkhan.schedule.models.enums.EventStatus;
+import com.yasirkhan.schedule.models.enums.EventType;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,41 +14,37 @@ import java.util.Map;
 import java.util.UUID;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class RouteResponseEventDto {
+    private EventType type;
+    private EventStatus eventTypeStatus;
+    private RouteResponse routeData;
+    private YardResponse sourceYardData;
+    private YardResponse destinationYardData;
 
-    private EventStatus eventTypeStatus; // SUCCESS, FAILURE
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class RouteResponse {
+        private UUID routeId;
+        private String routeName;
+        private UUID tehsilId;
+        private String tehsilName;
 
-    private UUID routeId;
-    private String routeName;
-    private String routePath;
-    private UUID tehsilId;
-    private String tehsilName;
-    private UUID sourceYardId;
-    private String sourceYardName;
-    private String sourceYardType;
-    private UUID destinationYardId;
-    private String destinationYardType;
-    private String destinationYardName;
-    private YardResponse yardData;
-    private String status;
+        private UUID sourceYardId;
+        private String sourceYardName;
+        private String sourceYardType;
 
-    @JsonProperty("routeData")
-    private void unpackNestedRouteData(Map<String, Object> routeData) {
-        if (routeData != null) {
-            this.routeId = UUID.fromString((String) routeData.get("routeId"));
-            this.routeName = (String) routeData.get("routeName");
-            this.routePath = (String) routeData.get("path");
-            this.tehsilId = (UUID.fromString((String) routeData.get("tehsilId")));
-            this.tehsilName = (String) routeData.get("tehsilName");
-            this.sourceYardId = (UUID.fromString((String) routeData.get("sourceYardId")));
-            this.sourceYardName = (String) routeData.get("sourceYardName");
-            this.sourceYardType = (String) routeData.get("sourceYardType");
-            this.destinationYardId = (UUID.fromString((String) routeData.get("destinationYardId")));
-            this.destinationYardType = (String) routeData.get("destinationYardType");
-            this.destinationYardName = (String) routeData.get("destinationYardName");
-            this.status = (String) routeData.get("status");
-        }
+        private UUID destinationYardId;
+        private String destinationYardName;
+        private String destinationYardType;
+
+        private String path;
+        private String estimatedDistance;
+        private String estimatedTime;
+        private String status;
     }
 
     @Data
@@ -59,7 +56,6 @@ public class RouteResponseEventDto {
         private String yardType;
         private String status;
 
-        // ADDED THESE:
         private UUID tehsilId;
         private String tehsilName;
 

@@ -49,4 +49,6 @@ public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
             LocalDate scheduleDate,
             Status status
     );
+
+    List<Schedule> findByTehsilId(UUID tehsilId);
 }

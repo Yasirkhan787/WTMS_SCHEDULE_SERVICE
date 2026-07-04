@@ -8,8 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -52,23 +50,20 @@ public class ScheduleController {
     // Get All Schedules
     @GetMapping("/all")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR', 'DRIVER')")
-    public ResponseEntity<List<ScheduleResponse>> getAllSchedule(
-            @RequestParam(required = false) String status) {
-        return ResponseEntity.ok(scheduleService.getAllSchedules(status));
+    public ResponseEntity<List<ScheduleResponse>> getAllSchedule() {
+        return ResponseEntity.ok(scheduleService.getAllSchedules());
     }
 
-    // Used by Tonnage/Trip Service via Feign Client
-    @GetMapping("/active-for-trip")
-    public ResponseEntity<ScheduleResponse> getActiveScheduleForTrip(
-            @RequestParam String vehicleNo,
-            @RequestParam String targetDate,
-            @RequestParam String targetTime) {
+    // Get Current Schedule for Driver Dashboard
+    @GetMapping("/current-schedule")
+    @PreAuthorize("hasRole('DRIVER')")
+    public ResponseEntity<ScheduleResponse> getCurrentSchedule() {
+        ScheduleResponse response = scheduleService.getCurrentSchedule();
 
-        LocalDate date = LocalDate.parse(targetDate);
-        LocalTime actualTime = LocalTime.parse(targetTime);
-
-        // Pass the RAW time directly to the service.
-        // The service will expand the Shift Template by 60 mins internally to see if it fits!
-        return ResponseEntity.ok(scheduleService.findActiveScheduleForTrip(vehicleNo, date, actualTime));
+        if (response == null) {
+            // Returns HTTP 204: Instructs your frontend to display the "Waiting for Assignment" screen!
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(response);
     }
 }

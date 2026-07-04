@@ -43,7 +43,18 @@ public class ScheduleLifecycleJob {
                 .filter(s -> s.getStatus() == Status.ASSIGNED || s.getStatus() == Status.ACTIVE)
                 .toList();
 
+        if (openSchedules.isEmpty()) {
+            return;
+        }
+
         for (Schedule schedule : openSchedules) {
+
+            // SAFETY FIX: Prevent NullPointerExceptions if a schedule is missing its template
+            if (schedule.getTemplate() == null || schedule.getScheduleDate() == null) {
+                log.warn("Skipping Schedule {} due to missing Template or Date.", schedule.getScheduleId());
+                continue;
+            }
+
             LocalDate shiftDate = schedule.getScheduleDate();
             LocalTime shiftStart = schedule.getTemplate().getStartTime();
             LocalTime shiftEnd = schedule.getTemplate().getEndTime();
@@ -64,13 +75,19 @@ public class ScheduleLifecycleJob {
 
             // Scenario 1: Shift is currently ongoing (or in the Grace Period window)
             if (!currentDateTime.isBefore(shiftStartDateTime) && currentDateTime.isBefore(ledgerCloseDateTime)) {
-                if (schedule.getStatus() != Status.ACTIVE) {
-                    newStatus = Status.ACTIVE; // Moves from ASSIGNED -> ACTIVE
+
+                // CRITICAL ANTI-DUPLICATE GATE:
+                // If the driver already activated it via the app, SKIP IT entirely!
+                if (schedule.getStatus() == Status.ACTIVE) {
+                    log.debug("Schedule {} is already ACTIVE via Driver interaction. Skipping background update.", schedule.getScheduleId());
+                    continue;
                 }
+
+                newStatus = Status.ACTIVE; // Fallback activation if the driver forgot to click "Start Trip"
             }
+
             // Scenario 2: The Reconciliation Window has officially closed
             else if (currentDateTime.isAfter(ledgerCloseDateTime)) {
-
                 if (schedule.getCompletedTrips() != null && schedule.getCompletedTrips() > 0) {
                     newStatus = Status.COMPLETED;
                 } else {
@@ -80,12 +97,13 @@ public class ScheduleLifecycleJob {
 
             // Execute the update
             if (newStatus != null) {
-                log.info("Closing Ledger for Schedule {}. Sync Window Passed. New Status: {}", schedule.getScheduleId(), newStatus);
+                log.info("Lifecycle Watchdog shifting Schedule {} to state: {}", schedule.getScheduleId(), newStatus);
 
                 Map<String, Object> updates = new HashMap<>();
                 updates.put("scheduleId", schedule.getScheduleId().toString());
                 updates.put("shiftStatus", newStatus.name());
 
+                // Re-uses your core service method which updates DB, syncs to Redis, and broadcasts events
                 scheduleService.updateSchedule(updates);
             }
         }

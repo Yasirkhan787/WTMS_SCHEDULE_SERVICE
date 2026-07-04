@@ -1,4 +1,4 @@
-package com.yasirkhan.schedule.services.implementation;
+package com.yasirkhan.schedule.services.implementations;
 
 import com.yasirkhan.schedule.exceptions.DataBaseException;
 import com.yasirkhan.schedule.exceptions.ResourceNotFoundException;
